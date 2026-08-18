@@ -8,6 +8,7 @@
     :root { color-scheme: light dark; }
     body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
     h1 { font-size: 1.4rem; }
+    h2 { font-size: 1.1rem; margin-bottom: .5rem; }
     form { display: grid; gap: .5rem; grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem; }
     form input, form button { padding: .5rem; font-size: 1rem; }
     form .full { grid-column: 1 / -1; }
@@ -16,6 +17,14 @@
     th, td { text-align: left; padding: .4rem .3rem; border-bottom: 1px solid #8884; }
     td.amount, th.amount { text-align: right; font-variant-numeric: tabular-nums; }
     .total { margin: .8rem 0; font-weight: 700; }
+    .compare { margin: 1.5rem 0; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+    .card { border: 1px solid #8884; border-radius: .5rem; padding: .8rem; text-align: center; }
+    .card .label { font-size: .85rem; opacity: .7; }
+    .card .big { font-size: 1.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .meta { font-size: .8rem; opacity: .7; }
+    details { margin-top: .6rem; }
+    details summary { cursor: pointer; font-size: .9rem; }
     footer { margin-top: 2rem; font-size: .8rem; opacity: .6; }
   </style>
 </head>
@@ -23,6 +32,52 @@
   <h1>Enflasyonumdan ne haber?</h1>
 
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <section class="compare">
+    <h2>Yıllık enflasyon kıyası</h2>
+    {% if comparison %}
+    <div class="cards">
+      <div class="card">
+        <div class="label">Senin enflasyonun</div>
+        <div class="big">%{{ comparison.personal_pct }}</div>
+      </div>
+      <div class="card">
+        <div class="label">Resmi TÜFE (TÜİK)</div>
+        <div class="big">%{{ comparison.official_pct }}</div>
+      </div>
+    </div>
+    <p class="meta">
+      Fiyat penceresi: {{ comparison.base_period.strftime('%Y-%m') }} →
+      {{ comparison.current_period.strftime('%Y-%m') }} ·
+      Sepet: {{ comparison.basket_period.strftime('%Y-%m') }} harcamaların ·
+      Fark: {{ comparison.diff_pct }} puan
+    </p>
+    <details>
+      <summary>Bu sayı nereden geldi?</summary>
+      <table>
+        <thead>
+          <tr><th>Kategori</th><th class="amount">Harcama</th><th class="amount">Pay</th></tr>
+        </thead>
+        <tbody>
+          {% for w in comparison.weight_rows %}
+          <tr>
+            <td>{{ w.category }}</td>
+            <td class="amount">{{ w.amount }} TL</td>
+            <td class="amount">%{{ w.share_pct }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="meta">
+        M1 notu: kategori bazlı resmi alt endeksler henüz bağlı değil; tüm
+        kategoriler manşet TÜFE oranını kullanıyor, bu yüzden iki sayı şimdilik
+        eşit. M2'de "senin gıda enflasyonun" kategorilere göre ayrışacak.
+      </p>
+    </details>
+    {% else %}
+    <p class="meta">{{ comparison_hint }}</p>
+    {% endif %}
+  </section>
 
   <form method="post" action="/expenses">
     <input class="full" name="description" placeholder="Açıklama (örn. süt)" required>

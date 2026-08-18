@@ -1,7 +1,8 @@
 """FastAPI uygulama giriş noktası.
 
 M1.3 kapsamı: /health + tek sayfalık harcama giriş formu.
-GET /  -> form, son harcamalar, bu ayın toplamı
+M1.6 kapsamı: kıyas bloğu — "senin %Y vs resmi %X" tek ekranda.
+GET /  -> form, kıyas bloğu, son harcamalar, bu ayın toplamı
 POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
 """
 
@@ -12,12 +13,17 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from enflasyonum import __version__, crud
 from enflasyonum.db import create_session_factory
-from enflasyonum.models import Category, Expense
+from enflasyonum.models import Category, Expense, OfficialCPI
+from enflasyonum.personal_index import (
+    PersonalIndexError,
+    compute_personal_index,
+    headline_relative,
+)
 
 app = FastAPI(
     title="Enflasyonumdan ne haber?",
@@ -26,6 +32,9 @@ app = FastAPI(
 )
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+#: Ekranda yüzdeler 2 ondalıkla gösterilir; hesap 6 ondalıkla yapılır.
+TWO_DP = Decimal("0.01")
 
 
 def get_session():
@@ -51,6 +60,70 @@ def _parse_amount(raw: str) -> Decimal:
     return value
 
 
+def _comparison_context(session: Session) -> dict:
+    """Kıyas bloğu verisi (M1.6).
+
+    Pencere: elimizdeki son resmi TÜFE dönemi (current) vs 12 ay öncesi
+    (base) — yıllık enflasyon. Sepet: harcama içeren son ay
+    (``weights_period``); resmi veri ~1 ay geriden geldiği için sepet ayı
+    pencereden bilinçli olarak ayrıdır. Veri eksikse ``comparison=None`` +
+    Türkçe ipucu döner; ana sayfa hiçbir koşulda 500 vermez.
+    """
+    latest_cpi = session.scalar(select(func.max(OfficialCPI.period)))
+    latest_expense = session.scalar(select(func.max(Expense.spent_at)))
+
+    if latest_cpi is None:
+        return {
+            "comparison": None,
+            "comparison_hint": "Resmi TÜFE verisi yok — önce ingest çalıştırılmalı.",
+        }
+    if latest_expense is None:
+        return {
+            "comparison": None,
+            "comparison_hint": "Kıyas için önce en az bir harcama gir.",
+        }
+
+    current = latest_cpi
+    base = date(current.year - 1, current.month, 1)
+    basket = date(latest_expense.year, latest_expense.month, 1)
+
+    try:
+        official_pct = ((headline_relative(session, base, current) - 1) * 100).quantize(
+            TWO_DP
+        )
+        result = compute_personal_index(
+            session, base=base, current=current, weights_period=basket
+        )
+    except PersonalIndexError as exc:
+        return {"comparison": None, "comparison_hint": f"Kıyas hesaplanamadı: {exc}"}
+
+    personal_pct = result.inflation_pct.quantize(TWO_DP)
+    total = sum(result.weights.values())
+    weight_rows = [
+        {
+            "category": cat,
+            "amount": amount,
+            "share_pct": (amount / total * 100).quantize(TWO_DP),
+        }
+        for cat, amount in sorted(
+            result.weights.items(), key=lambda kv: kv[1], reverse=True
+        )
+    ]
+    return {
+        "comparison": {
+            "personal_pct": personal_pct,
+            "official_pct": official_pct,
+            "diff_pct": (personal_pct - official_pct).quantize(TWO_DP),
+            "base_period": base,
+            "current_period": current,
+            "basket_period": basket,
+            "weight_rows": weight_rows,
+            "weights_total": total,
+        },
+        "comparison_hint": None,
+    }
+
+
 def _index_context(session: Session, error: str | None = None) -> dict:
     today = date.today()
     rows = session.execute(
@@ -73,6 +146,7 @@ def _index_context(session: Session, error: str | None = None) -> dict:
         "today": today,
         "error": error,
         "version": __version__,
+        **_comparison_context(session),
     }
 
 
