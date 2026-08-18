@@ -6,8 +6,8 @@
 ## ŞU AN NEREDEYİZ
 
 **Aşama:** M1 — dikey dilim (2026-08-18).
-**Son biten:** M1.7 **deployed** — canlı URL: https://enflasyonum-7gcn.onrender.com (Render free + Neon PG). Kanıtlar: `/health` 200 (deploy logu), ilk manuel `daily-ingest` koşusu yeşil (canlı DB'de 24 ay TÜFE).
-**Sıradaki tek iş:** Umut ana sayfada iki sayıyı (kişisel vs resmi) tarayıcıda görür → M1.5+M1.6 `verified`. Sonra 14 gün harcama girişi = M1 kapanışı. Ayrıca: Neon şifresi sohbete düştüğü için **reset password** + Render env + GitHub secret güncellemesi bekliyor.
+**Son biten:** M1.5+M1.6 **verified** (2026-08-18) — Umut canlı URL'de iki sayıyı gördü (ekran görüntüsü kanıtı): %31.75 vs %31.75, pencere 2025-07 → 2026-07, sepet 2026-08 (gıda 50 TL, pay %100), M1 eşitlik notu ekranda. M1.7 `deployed`: https://enflasyonum-7gcn.onrender.com
+**Sıradaki tek iş:** 14 gün düzenli harcama girişi (~2026-09-01'e kadar) = M1 kapanışı. **Açık güvenlik borcu:** Neon şifresi sohbete düştü → reset password + Render `DATABASE_URL` + GitHub secret `LIVE_DATABASE_URL` güncellemesi.
 
 ## Milestone'lar
 
@@ -21,8 +21,8 @@ Tek akış: harcama gir → ay sonunda kişisel endeks + TÜİK kıyası tek ekr
 | M1.2 | PostgreSQL şeması: `expenses`, `categories`, `official_cpi` | migration koşuyor, testli CRUD | verified |
 | M1.3 | Harcama giriş formu (tek sayfa web UI) | tarayıcıdan harcama eklenebiliyor | verified |
 | M1.4 | TÜİK/EVDS TÜFE ingestion job | son 24 ay TÜFE DB'de, idempotent | verified |
-| M1.5 | Kişisel endeks hesap motoru (Laspeyres) | birim testli, elle doğrulanmış örnek | tested |
-| M1.6 | Kıyas ekranı: "senin %Y vs resmi %X" | tek ekranda iki sayı | tested |
+| M1.5 | Kişisel endeks hesap motoru (Laspeyres) | birim testli, elle doğrulanmış örnek | verified |
+| M1.6 | Kıyas ekranı: "senin %Y vs resmi %X" | tek ekranda iki sayı | verified |
 | M1.7 | Deploy (Render free + Neon PG + Actions cron) | telefondan URL ile erişilebiliyor | deployed |
 
 **M1 Done tanımı:** Umut 14 gün kendi harcamasını girmiş ve app ilk kişisel
@@ -64,3 +64,4 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 | 2026-08-18 | Kıyas penceresi = son resmi TÜFE dönemi vs 12 ay öncesi (yıllık); sepet ayı ≠ baz ayı — motora geriye-uyumlu `weights_period` parametresi eklendi (ağırlıklar kullanıcının son harcama ayından, göreli resmi pencereden) | Resmi TÜFE ~1 ay geriden yayımlanır; kullanıcının güncel sepeti pencere baz ayına denk gelmez. Kıyas bloğu asla 500 vermez: veri eksikse Türkçe ipucu gösterilir. M1'de iki sayı eşittir (manşet fallback) — ekranda açıkça not edildi, M2'de ayrışır |
 | 2026-08-18 | Deploy: Render free (web, blueprint) + Neon free (PG) + GitHub Actions cron (günlük ingest 07:30 UTC) | Fly.io CLI ister → lokal ortam yok, elenir; Render/Neon tamamen web UI. Render cron ücretli → ücretsiz Actions cron, desen zaten kurulu. Neon URL öneki `postgresql+psycopg://` yapılmalı (psycopg3). Ödünleşim: free instance ~15 dk'da uyur, ilk istek 30–60 sn |
 | 2026-08-18 | **M1.7 deployed:** canlı URL https://enflasyonum-7gcn.onrender.com — kanıt: deploy logunda `/health` 200 + ilk manuel daily-ingest yeşil. İlk deploy denemesi kırmızıydı: Render blueprint `sync:false` env değişkenini sormadı → `DATABASE_URL` elle Environment'a girildi; ayrıca ilk ingest koşusu secret'a çift-şemalı URL yapıştırıldığı için düştü, secret düzeltilince yeşil | Deploy iki bağımsız kanıtla kapatılır: health ucu + zamanlanmış iş. Neon şifresi sohbete düştü → reset password borcu kayda geçirildi |
+| 2026-08-18 | **M1.5+M1.6 verified:** Umut canlı URL'de gördü (ekran görüntüsü): %31.75 vs %31.75, pencere 2025-07 → 2026-07, sepet 2026-08 (gıda 50 TL %100), "Bu ayın toplamı: 50.00 TL". Canlı Neon DB'de gerçek EVDS verisiyle hesap doğru çalışıyor | `verified` = gerçek kullanıcı, gerçek veri, gerçek ortam. Yıllık %31.75, EVDS 2025-07→2026-07 penceresinin gerçek değeri |
