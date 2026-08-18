@@ -1,7 +1,12 @@
 """TÜİK TÜFE verisini TCMB EVDS API'sinden çekip DB'ye yazan ingestion job'ı.
 
-Kaynak: EVDS web servisi (evds3.tcmb.gov.tr), seri: TP.FG.J0
-(Tüketici Fiyat Endeksi, 2003=100, aylık).
+Kaynak: EVDS web servisi (evds3.tcmb.gov.tr), seri: TP.TUKFIY2025.GENEL
+(Tüketici Fiyat Endeksi, 2025=100, aylık; grup bie_tukfiy2025).
+
+Not: TÜİK, Ocak 2026'dan itibaren TÜFE temel yılını 2003=100'den
+2025=100'e taşıdı (ECOICOP v2, AB uyumu). Eski seri TP.FG.J0 2026-01'de
+kesildi. Yeni seri geçmişe dönük değerleri de içerir; zincirleme gerekmez.
+Karar kaydı: ROADMAP.md.
 
 Kurallar:
 - API anahtarı `EVDS_API_KEY` ortam değişkeninden okunur, koda gömülmez.
@@ -29,7 +34,7 @@ from enflasyonum import crud
 from enflasyonum.db import create_session_factory
 
 EVDS_BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
-SERIES = "TP.FG.J0"
+SERIES = "TP.TUKFIY2025.GENEL"
 # EVDS JSON çıktısında seri kodundaki noktalar alt çizgiye döner.
 SERIES_JSON_KEY = SERIES.replace(".", "_")
 

@@ -32,6 +32,12 @@ def test_months_back():
     assert ingest.months_back(date(2026, 1, 5), 2) == date(2025, 11, 1)
 
 
+def test_series_is_2025_base():
+    # TÜİK Ocak 2026'da 2003=100 bazını bıraktı; eski koda dönüş regresyondur.
+    assert ingest.SERIES == "TP.TUKFIY2025.GENEL"
+    assert ingest.SERIES_JSON_KEY == "TP_TUKFIY2025_GENEL"
+
+
 def test_parse_period_both_orders():
     assert ingest.parse_period("2024-1") == date(2024, 1, 1)
     assert ingest.parse_period("12-2025") == date(2025, 12, 1)
@@ -39,25 +45,25 @@ def test_parse_period_both_orders():
 
 def test_parse_items_skips_null_and_garbage():
     items = [
-        {"Tarih": "2025-6", "TP_FG_J0": "2915.27"},
-        {"Tarih": "2025-7", "TP_FG_J0": None},
-        {"Tarih": "bozuk", "TP_FG_J0": "1"},
-        {"Tarih": "2025-8", "TP_FG_J0": "abc"},
+        {"Tarih": "2025-6", "TP_TUKFIY2025_GENEL": "98.395995"},
+        {"Tarih": "2025-7", "TP_TUKFIY2025_GENEL": None},
+        {"Tarih": "bozuk", "TP_TUKFIY2025_GENEL": "1"},
+        {"Tarih": "2025-8", "TP_TUKFIY2025_GENEL": "abc"},
     ]
     parsed = ingest.parse_items(items)
-    assert parsed == [(date(2025, 6, 1), Decimal("2915.27"))]
+    assert parsed == [(date(2025, 6, 1), Decimal("98.395995"))]
 
 
 def test_ingest_idempotent(session):
     parsed = [
-        (date(2025, 6, 1), Decimal("2915.27")),
-        (date(2025, 7, 1), Decimal("2980.44")),
+        (date(2025, 6, 1), Decimal("98.395995")),
+        (date(2025, 7, 1), Decimal("100.421925")),
     ]
     assert ingest.ingest_cpi(session, parsed) == 2
     assert ingest.ingest_cpi(session, parsed) == 2  # ikinci kosu
     rows = crud.list_official_cpi(session)
     assert len(rows) == 2  # ciftlenme yok
-    assert rows[0].index_value == Decimal("2915.27")
+    assert rows[0].index_value == Decimal("98.395995")
 
 
 def test_fetch_sends_key_header_and_parses(monkeypatch):
@@ -68,7 +74,7 @@ def test_fetch_sends_key_header_and_parses(monkeypatch):
         captured["key"] = request.headers.get("key")
         body = {
             "totalCount": 1,
-            "items": [{"Tarih": "2025-6", "TP_FG_J0": "2915.27"}],
+            "items": [{"Tarih": "2025-6", "TP_TUKFIY2025_GENEL": "98.395995"}],
         }
         return httpx.Response(200, content=json.dumps(body))
 
@@ -77,10 +83,10 @@ def test_fetch_sends_key_header_and_parses(monkeypatch):
         "test-key", date(2024, 8, 1), date(2026, 8, 18), client=client
     )
     assert captured["key"] == "test-key"
-    assert "series=TP.FG.J0" in captured["url"]
+    assert "series=TP.TUKFIY2025.GENEL" in captured["url"]
     assert "startDate=01-08-2024" in captured["url"]
     assert "endDate=18-08-2026" in captured["url"]
-    assert items == [{"Tarih": "2025-6", "TP_FG_J0": "2915.27"}]
+    assert items == [{"Tarih": "2025-6", "TP_TUKFIY2025_GENEL": "98.395995"}]
 
 
 def test_fetch_raises_on_403():
