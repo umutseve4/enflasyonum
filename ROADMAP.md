@@ -6,8 +6,8 @@
 ## ŞU AN NEREDEYİZ
 
 **Aşama:** M1 — dikey dilim (2026-08-18).
-**Son biten:** M1.4 — EVDS TÜFE ingestion, **verified**. Canlı koşu kanıtı: `artifacts/live-ingest.txt` — 24/24 dönem (2024-08..2026-07), PASS×2, idempotent. TÜİK'in 2025=100 rebase'i nedeniyle seri `TP.TUKFIY2025.GENEL`'e taşındı (PR #5, merge `819bdb0`).
-**Sıradaki tek iş:** M1.5 — kişisel endeks hesap motoru (Laspeyres).
+**Son biten:** M1.5 — Laspeyres kişisel endeks motoru, **tested** (PR #6, merge `d0eef6d`, CI 3/3 yeşil, 11 test + elle doğrulanmış örnek). `verified` etiketi M1.6 ekranında gerçek veriyle sayı görününce verilecek.
+**Sıradaki tek iş:** M1.6 — kıyas ekranı ("senin %Y vs resmi %X").
 
 ## Milestone'lar
 
@@ -21,7 +21,7 @@ Tek akış: harcama gir → ay sonunda kişisel endeks + TÜİK kıyası tek ekr
 | M1.2 | PostgreSQL şeması: `expenses`, `categories`, `official_cpi` | migration koşuyor, testli CRUD | verified |
 | M1.3 | Harcama giriş formu (tek sayfa web UI) | tarayıcıdan harcama eklenebiliyor | verified |
 | M1.4 | TÜİK/EVDS TÜFE ingestion job | son 24 ay TÜFE DB'de, idempotent | verified |
-| M1.5 | Kişisel endeks hesap motoru (Laspeyres) | birim testli, elle doğrulanmış örnek | planned |
+| M1.5 | Kişisel endeks hesap motoru (Laspeyres) | birim testli, elle doğrulanmış örnek | tested |
 | M1.6 | Kıyas ekranı: "senin %Y vs resmi %X" | tek ekranda iki sayı | planned |
 | M1.7 | Deploy (ücretsiz tier: Fly.io/Render + Neon/Supabase PG) | telefondan URL ile erişilebiliyor | planned |
 
@@ -31,7 +31,9 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 ### M2 — Veri derinliği (taslak)
 
 - Kategori bazlı alt endeksler (gıda/ulaşım/eğlence) — EVDS `bie_tukfiy2025`
-  grubu tüm ECOICOP alt kırılımlarını içeriyor (keşif: `artifacts/evds-discovery.txt`)
+  grubu tüm ECOICOP alt kırılımlarını içeriyor (keşif: `artifacts/evds-discovery.txt`);
+  motor hazır: `compute_personal_index(category_relatives=...)` kategori
+  görelilerini şimdiden kabul ediyor
 - Aylık özet kartı (paylaşılabilir görsel)
 - Harcama geçmişi grafiği
 
@@ -58,3 +60,4 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 | 2026-08-18 | Ingest'te fetch/parse ayrımı; CI'da canlı API çağrısı yok (MockTransport) | Parser ağsız test edilir; dış servise bağımlı test flaky + secret riski |
 | 2026-08-18 | EVDS anahtarı `EVDS_API_KEY` env'den, HTTP `key` header'ında | Secret koda/repoya girmez; EVDS anahtarı query'de değil header'da ister |
 | 2026-08-18 | Canlı doğrulama deseni: workflow edit-push → Actions koşusu → sonuç `artifacts/*.txt` olarak bot commit'i | Umut'un lokal ortamı yok; tüm canlı kanıtlar repo içinde, tekrarlanabilir |
+| 2026-08-18 | Kişisel endeks = harcama-ağırlıklı Laspeyres: baz ay kategori harcamaları (w_i) × resmi fiyat görelileri (R_i); `L = 100·Σ(w_i·R_i)/Σ(w_i)`. M1'de tüm kategoriler manşet TÜFE görelisine düşer; `category_relatives` parametresi M2 ECOICOP alt endekslerine hazır | Harcama kaydında miktar/birim fiyat yok → madde bazlı Laspeyres hesaplanamaz; ONS/Eurostat kişisel enflasyon hesaplayıcılarıyla aynı yöntem, motor M2'de değişmeden kalır |
