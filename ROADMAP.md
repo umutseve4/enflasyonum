@@ -5,8 +5,9 @@
 
 ## ŞU AN NEREDEYİZ
 
-**Aşama:** M1 başlangıcı — repo iskeleti kuruldu (2026-08-18).
-**Sıradaki tek iş:** M1.1 — FastAPI iskeleti + `/health` endpoint + CI yeşil.
+**Aşama:** M1 — dikey dilim (2026-08-18).
+**Son biten:** M1.1 — FastAPI iskeleti + `/health` + CI (commit `74951e7`).
+**Sıradaki tek iş:** M1.2 — PostgreSQL şeması + migration + testli CRUD.
 
 ## Milestone'lar
 
@@ -16,7 +17,7 @@ Tek akış: harcama gir → ay sonunda kişisel endeks + TÜİK kıyası tek ekr
 
 | # | İş | Kabul kriteri | Durum |
 |---|---|---|---|
-| M1.1 | FastAPI iskeleti + `/health` + CI (pytest+ruff) | CI yeşil, endpoint 200 döner | planned |
+| M1.1 | FastAPI iskeleti + `/health` + CI (pytest+ruff) | CI yeşil, endpoint 200 döner | tested |
 | M1.2 | PostgreSQL şeması: `expenses`, `categories`, `official_cpi` | migration koşuyor, testli CRUD | planned |
 | M1.3 | Harcama giriş formu (tek sayfa web UI) | tarayıcıdan harcama eklenebiliyor | planned |
 | M1.4 | TÜİK/EVDS TÜFE ingestion job | son 24 ay TÜFE DB'de, idempotent | planned |
@@ -45,3 +46,4 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 | 2026-08-18 | Proje seçildi: kişisel enflasyon app'i | Ekonomi kimliğiyle eşleşme, gerçek acı frekansı (haftalık alışveriş), veri kilidi savunulabilirliği |
 | 2026-08-18 | Web-first (FastAPI + PG), mobil store yok | Öğrenme maliyeti ve deploy hızı; telefonda tarayıcı yeterli |
 | 2026-08-18 | OCR/ML kapsam dışı (M1) | Dikey dilim disiplini — önce çalışan döngü |
+| 2026-08-18 | App adı: "Enflasyonumdan ne haber?" (repo slug: `enflasyonum`) | URL/import uyumluluğu; marka adı README'de |
