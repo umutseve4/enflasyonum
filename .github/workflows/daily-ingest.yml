@@ -1,0 +1,36 @@
+# Günlük EVDS TÜFE ingest — canlı (Neon) veritabanına.
+# Render'ın cron'u ücretli; GitHub Actions cron ücretsiz ve desen zaten kurulu.
+# Gerekli repo secret'ları: EVDS_API_KEY, LIVE_DATABASE_URL
+name: daily-ingest
+
+on:
+  schedule:
+    - cron: "30 7 * * *" # her gün 07:30 UTC (10:30 TR) — TÜİK ~10:00 TR'de açıklar
+  workflow_dispatch: {}
+
+concurrency:
+  group: daily-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install .
+      - name: Migrate + ingest (son 24 ay, idempotent)
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+          DATABASE_URL: ${{ secrets.LIVE_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo 'LIVE_DATABASE_URL secret tanımlı değil — deploy tamamlanınca eklenecek.'
+            exit 0
+          fi
+          alembic upgrade head
+          python -m enflasyonum.ingest 24
