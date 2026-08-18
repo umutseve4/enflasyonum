@@ -11,11 +11,11 @@ enflasyon hesaplayıcılarıyla aynı yöntem):
     w_i : baz dönemde i kategorisine yapılan harcama (TL)
     R_i : i kategorisinin fiyat görelisi = I_i,t / I_i,0
 
-M1'de elimizde tek resmi seri var (manşet TÜFE, ``TP.TUKFIY2025.GENEL``);
-kategoriye özel göreli verilmeyen her kategori manşet göreliye düşer.
-M2'de ECOICOP alt endeksleri (EVDS ``bie_tukfiy2025`` grubu) kategori
-görelilerini sağlayacak — ``category_relatives`` parametresi bu genişlemeyi
-şimdiden destekler; motor kodu değişmeden kalır.
+M2.1 itibarıyla ECOICOP alt endeksleri (EVDS ``bie_tukfiy2025`` grubu)
+kategori görelilerini sağlar: ``category_relatives_from_db`` kategori adını
+alt seriye eşler (``enflasyonum.series``), verisi olan kategoriler kendi
+görelisini kullanır. Eşleşmeyen ya da verisi eksik her kategori manşet
+göreliye düşer — motor kodu (``laspeyres``) değişmeden kalmıştır.
 
 Ek karar (M1.6): resmi TÜFE ~1 ay geriden yayımlanır; kullanıcı bugün
 harcama girer ama son resmi dönem geçmiştedir. ``weights_period`` parametresi
@@ -32,12 +32,13 @@ import calendar
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from enflasyonum.models import Category, Expense, OfficialCPI
+from enflasyonum.series import HEADLINE_SERIES, category_to_series
 
 #: Endeks çıktısı 6 ondalığa yuvarlanır — official_cpi.index_value ile aynı
 #: hassasiyet (bkz. migration 0002).
@@ -116,9 +117,14 @@ def category_weights(session: Session, period: date) -> dict[str, Decimal]:
     return {name: Decimal(str(total)) for name, total in rows}
 
 
-def _official_index(session: Session, period: date) -> Decimal:
+def _official_index(
+    session: Session, period: date, series_code: str = HEADLINE_SERIES
+) -> Decimal:
     row = session.scalar(
-        select(OfficialCPI).where(OfficialCPI.period == date(period.year, period.month, 1))
+        select(OfficialCPI).where(
+            OfficialCPI.period == date(period.year, period.month, 1),
+            OfficialCPI.series_code == series_code,
+        )
     )
     if row is None:
         raise PersonalIndexError(
@@ -134,6 +140,44 @@ def headline_relative(session: Session, base: date, current: date) -> Decimal:
     if base_value == 0:
         raise PersonalIndexError("baz donem endeksi sifir: goreli tanimsiz")
     return _official_index(session, current) / base_value
+
+
+def series_relative(
+    session: Session, base: date, current: date, series_code: str
+) -> Decimal | None:
+    """Alt endeks fiyat görelisi: I_current / I_base (verilen seri için).
+
+    Veri eksikse ya da baz değer sıfırsa None döner — çağıran manşete
+    düşer; hesap bu yüzden asla patlamaz (M2.1 kararı: alt seri henüz
+    ingest edilmediyse davranış M1 ile birebir aynı kalır).
+    """
+    try:
+        base_value = _official_index(session, base, series_code)
+        current_value = _official_index(session, current, series_code)
+    except PersonalIndexError:
+        return None
+    if base_value == 0:
+        return None
+    return current_value / base_value
+
+
+def category_relatives_from_db(
+    session: Session, base: date, current: date, categories: Iterable[str]
+) -> dict[str, Decimal]:
+    """Kategori -> alt endeks görelisi sözlüğü (M2.1).
+
+    Eşleşmeyen kategori ya da verisi eksik seri sözlüğe girmez; motor o
+    kategoriler için manşet göreliyi kullanır (mevcut fallback davranışı).
+    """
+    out: dict[str, Decimal] = {}
+    for cat in categories:
+        code = category_to_series(cat)
+        if code is None:
+            continue
+        rel = series_relative(session, base, current, code)
+        if rel is not None:
+            out[cat] = rel
+    return out
 
 
 def compute_personal_index(

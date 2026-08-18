@@ -1,7 +1,9 @@
 """TÜİK TÜFE verisini TCMB EVDS API'sinden çekip DB'ye yazan ingestion job'ı.
 
-Kaynak: EVDS web servisi (evds3.tcmb.gov.tr), seri: TP.TUKFIY2025.GENEL
-(Tüketici Fiyat Endeksi, 2025=100, aylık; grup bie_tukfiy2025).
+Kaynak: EVDS web servisi (evds3.tcmb.gov.tr), grup bie_tukfiy2025
+(Tüketici Fiyat Endeksi, 2025=100, aylık). M2.1'den itibaren manşet
+(TP.TUKFIY2025.GENEL) + 13 ECOICOP bölüm endeksi (TP.TUKFIY2025.01..13)
+birlikte çekilir — toplam 14 seri (liste: enflasyonum.series.ALL_SERIES).
 
 Not: TÜİK, Ocak 2026'dan itibaren TÜFE temel yılını 2003=100'den
 2025=100'e taşıdı (ECOICOP v2, AB uyumu). Eski seri TP.FG.J0 2026-01'de
@@ -32,11 +34,12 @@ from sqlalchemy.orm import Session
 
 from enflasyonum import crud
 from enflasyonum.db import create_session_factory
+from enflasyonum.series import ALL_SERIES, HEADLINE_SERIES, json_key
 
 EVDS_BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
-SERIES = "TP.TUKFIY2025.GENEL"
+SERIES = HEADLINE_SERIES  # manşet; test test_series_is_2025_base bunu sabitler
 # EVDS JSON çıktısında seri kodundaki noktalar alt çizgiye döner.
-SERIES_JSON_KEY = SERIES.replace(".", "_")
+SERIES_JSON_KEY = json_key(SERIES)
 
 
 def months_back(today: date, months: int) -> date:
@@ -57,11 +60,12 @@ def fetch_cpi_items(
     api_key: str,
     start: date,
     end: date,
+    series_code: str = SERIES,
     client: httpx.Client | None = None,
 ) -> list[dict]:
     """EVDS'den ham seri kayıtlarını çek. `client` testte mock transport için."""
     url = (
-        f"{EVDS_BASE}series={SERIES}"
+        f"{EVDS_BASE}series={series_code}"
         f"&startDate={start.strftime('%d-%m-%Y')}"
         f"&endDate={end.strftime('%d-%m-%Y')}"
         "&type=json"
@@ -88,15 +92,18 @@ def parse_period(raw: str) -> date:
     return date(year, month, 1)
 
 
-def parse_items(items: list[dict]) -> list[tuple[date, Decimal]]:
+def parse_items(
+    items: list[dict], value_key: str = SERIES_JSON_KEY
+) -> list[tuple[date, Decimal]]:
     """Ham kayıtları (dönem, endeks) çiftlerine çevir; boş/bozuk değerleri atla.
 
+    `value_key` seri başına değişir (M2.1) — varsayılan manşet anahtarı.
     Para/endeks değerleri Decimal'e string üzerinden gider — float'a
     uğramaz (yuvarlama hatası yasağı, bkz. ROADMAP karar kaydı).
     """
     out: list[tuple[date, Decimal]] = []
     for item in items:
-        raw_value = item.get(SERIES_JSON_KEY)
+        raw_value = item.get(value_key)
         raw_period = item.get("Tarih")
         if raw_value is None or raw_period is None:
             continue
@@ -109,15 +116,19 @@ def parse_items(items: list[dict]) -> list[tuple[date, Decimal]]:
     return out
 
 
-def ingest_cpi(session: Session, parsed: list[tuple[date, Decimal]]) -> int:
+def ingest_cpi(
+    session: Session, parsed: list[tuple[date, Decimal]], series_code: str = SERIES
+) -> int:
     """Upsert ile yaz; döndürülen sayı işlenen dönem sayısıdır."""
     for period, value in parsed:
-        crud.upsert_official_cpi(session, period=period, index_value=value)
+        crud.upsert_official_cpi(
+            session, period=period, index_value=value, series_code=series_code
+        )
     return len(parsed)
 
 
 def run(months: int = 24) -> int:
-    """CLI girişi. 0 = PASS, 1 = FAIL döner."""
+    """CLI girişi. 0 = PASS, 1 = FAIL döner. M2.1: 14 seriyi birden çeker."""
     api_key = os.environ.get("EVDS_API_KEY")
     if not api_key:
         print("FAIL: EVDS_API_KEY ortam değişkeni tanımlı değil.")
@@ -126,24 +137,32 @@ def run(months: int = 24) -> int:
 
     today = date.today()
     start = months_back(today, months)
+    counts: dict[str, int] = {}
+    factory = create_session_factory()
     try:
-        items = fetch_cpi_items(api_key, start, today)
+        with httpx.Client(timeout=30) as client, factory() as session:
+            for code in ALL_SERIES:
+                items = fetch_cpi_items(api_key, start, today, series_code=code, client=client)
+                parsed = parse_items(items, value_key=json_key(code))
+                counts[code] = ingest_cpi(session, parsed, series_code=code)
+            rows = crud.list_official_cpi(session)
     except httpx.HTTPError as exc:
         print(f"FAIL: EVDS isteği başarısız: {exc}")
         return 1
 
-    parsed = parse_items(items)
-    factory = create_session_factory()
-    with factory() as session:
-        n = ingest_cpi(session, parsed)
-        rows = crud.list_official_cpi(session)
+    need = min(months, 12)
+    eksik = [code for code, n in counts.items() if n < need]
 
     print("===== OTOMATIK KONTROL =====")
-    print(f"islenen donem: {n}")
-    print(f"tablodaki satir: {len(rows)}")
+    print(f"islenen donem: {counts[SERIES]}")
+    for code, n in counts.items():
+        print(f"islenen {code}: {n}")
+    print(f"tablodaki satir (manset): {len(rows)}")
     if rows:
         print(f"aralik: {rows[0].period} .. {rows[-1].period}")
-    status = "PASS" if n >= min(months, 12) else "FAIL"
+    if eksik:
+        print(f"eksik seriler: {', '.join(eksik)}")
+    status = "PASS" if not eksik else "FAIL"
     print(f"sonuc: {status}")
     return 0 if status == "PASS" else 1
 
