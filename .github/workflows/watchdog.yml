@@ -1,0 +1,40 @@
+name: watchdog
+
+on:
+  schedule:
+    - cron: "15 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        id: ping
+        run: |
+          code=$(curl -sS -o /dev/null -w "%{http_code}" \
+            --max-time 90 \
+            --retry 5 \
+            --retry-delay 20 \
+            --retry-all-errors \
+            https://enflasyonum-7gcn.onrender.com/health) || code="000"
+
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "HTTP $code"
+
+      - name: Open issue on failure
+        if: steps.ping.outputs.code != '200'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Watchdog FAIL: /health HTTP ${{ steps.ping.outputs.code }}" \
+            --body "Otomatik bekci: canli site saglikli yanit vermedi. Render loglarini kontrol et. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Fail if unhealthy
+        if: steps.ping.outputs.code != '200'
+        run: exit 1
