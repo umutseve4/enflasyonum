@@ -42,5 +42,6 @@ class OfficialCPI(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     period: Mapped[date] = mapped_column(Date, unique=True)
-    index_value: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    # 2025=100 TÜFE serisi 6 ondalık taşır (ör. 88.578291) — bkz. migration 0002.
+    index_value: Mapped[Decimal] = mapped_column(Numeric(14, 6))
     source: Mapped[str] = mapped_column(String(50), default="TUIK", server_default="TUIK")
