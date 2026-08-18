@@ -2,6 +2,7 @@ name: live-ingest
 
 # M1.4 canlı doğrulama: EVDS'den gerçek TÜFE çekimi.
 # Bu dosyanın push'u tetikler; sonuç artifacts/live-ingest.txt olarak commit'lenir.
+# Yeniden tetikleme #2: TP.TUKFIY2025.GENEL serisine geçiş sonrası (beklenti: 24 dönem).
 on:
   push:
     paths:
