@@ -1,0 +1,84 @@
+name: evds-discovery
+
+# Tek seferlik keşif: 2025=100 bazlı yeni TÜFE serisinin EVDS kodunu
+# metadata API'sinden bulur, sonucu artifacts/evds-discovery.txt'e yazar.
+on:
+  push:
+    paths:
+      - ".github/workflows/evds-discovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install httpx
+
+      - name: Query EVDS metadata
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+        run: |
+          python - <<'EOF' > discovery.txt 2>&1
+          import os, httpx
+
+          BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
+          key = os.environ["EVDS_API_KEY"]
+          h = {"key": key}
+
+          def get(path):
+              r = httpx.get(BASE + path, headers=h, timeout=30)
+              r.raise_for_status()
+              return r.json()
+
+          print("== 1) Tum veri gruplari icinde TUFE/2025 taramasi ==")
+          groups = get("datagroups?mode=0&type=json")
+          cands = []
+          for g in groups:
+              name = (g.get("DATAGROUP_NAME") or "")
+              code = (g.get("DATAGROUP_CODE") or "")
+              blob = (name + " " + code).lower()
+              if ("tuketici" in blob or "t\u00fcketici" in blob or "tufe" in blob
+                      or "t\u00fcfe" in blob or "2025" in blob):
+                  cands.append((code, name))
+                  print(f"GRUP: {code} | {name}")
+
+          print()
+          print("== 2) Aday gruplarin seri listeleri ==")
+          for code, name in cands:
+              try:
+                  series = get(f"serieList?type=json&code={code}")
+              except Exception as e:
+                  print(f"[{code}] HATA: {e}")
+                  continue
+              for s in series:
+                  scode = s.get("SERIE_CODE")
+                  sname = s.get("SERIE_NAME")
+                  if scode and ("Genel" in (sname or "") or "J0" in scode
+                                or "2025" in (sname or "")):
+                      print(f"SERI: {scode} | {sname} | grup={code}")
+          print()
+          print("===== OTOMATIK KONTROL =====")
+          print(f"aday grup: {len(cands)}")
+          print("sonuc: PASS" if cands else "sonuc: FAIL")
+          EOF
+          cat discovery.txt
+
+      - name: Commit result
+        run: |
+          mkdir -p artifacts
+          cp discovery.txt artifacts/evds-discovery.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/evds-discovery.txt
+          git commit -m "ci: EVDS keşif sonucu [skip ci]" || echo "no changes"
+          git pull --rebase origin main
+          git push
