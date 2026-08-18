@@ -5,9 +5,10 @@
 
 ## ŞU AN NEREDEYİZ
 
-**Aşama:** M1 — dikey dilim (2026-08-18).
-**Son biten:** M1.5+M1.6 **verified** (2026-08-18) — Umut canlı URL'de iki sayıyı gördü (ekran görüntüsü kanıtı): %31.75 vs %31.75, pencere 2025-07 → 2026-07, sepet 2026-08 (gıda 50 TL, pay %100), M1 eşitlik notu ekranda. M1.7 `deployed`: https://enflasyonum-7gcn.onrender.com
-**Sıradaki tek iş:** 14 gün düzenli harcama girişi (~2026-09-01'e kadar) = M1 kapanışı. **Açık güvenlik borcu:** Neon şifresi sohbete düştü → reset password + Render `DATABASE_URL` + GitHub secret `LIVE_DATABASE_URL` güncellemesi.
+**Aşama:** M2 — veri derinliği (2026-08-18).
+**Son biten:** M2.1 **tested** (2026-08-18) — PR #9 squash merge (`a7bd34f`), CI 3/3 yeşil (Py 3.11/3.12/3.13, PG16+SQLite). 13 ECOICOP bölüm alt endeksi eklendi; kişisel endeks artık kategori bazında kendi alt serisiyle hesaplanıyor → kişisel ≠ resmi ayrışması mümkün.
+**Sıradaki tek iş (Umut, ~2 dk):** Actions → daily-ingest → Run workflow → yeşil bekle → https://enflasyonum-7gcn.onrender.com yenile → kozmetik-ağırlıklı sepette kişisel sayının resmiden ayrıştığını gör + screenshot = M2.1 **verified**. Ayrıca 14 gün harcama girişi (M1 kapanışı, ~2026-09-01).
+**Açık güvenlik borcu:** Neon şifresi sohbete düştü → reset password + Render `DATABASE_URL` + GitHub secret `LIVE_DATABASE_URL` güncellemesi.
 
 ## Milestone'lar
 
@@ -28,14 +29,13 @@ Tek akış: harcama gir → ay sonunda kişisel endeks + TÜİK kıyası tek ekr
 **M1 Done tanımı:** Umut 14 gün kendi harcamasını girmiş ve app ilk kişisel
 enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 
-### M2 — Veri derinliği (taslak)
+### M2 — Veri derinliği
 
-- Kategori bazlı alt endeksler (gıda/ulaşım/eğlence) — EVDS `bie_tukfiy2025`
-  grubu tüm ECOICOP alt kırılımlarını içeriyor (keşif: `artifacts/evds-discovery.txt`);
-  motor hazır: `compute_personal_index(category_relatives=...)` kategori
-  görelilerini şimdiden kabul ediyor
-- Aylık özet kartı (paylaşılabilir görsel)
-- Harcama geçmişi grafiği
+| # | İş | Kabul kriteri | Durum |
+|---|---|---|---|
+| M2.1 | Kategori bazlı alt endeksler (13 ECOICOP bölümü, EVDS `bie_tukfiy2025`) | kişisel ≠ resmi ayrışması canlıda görünür; eşleşmeyen kategori `*` ile manşete düşer | tested (CI) — canlı doğrulama: sub-seri ingest + Umut screenshot bekliyor |
+| M2.2 | Aylık özet kartı (paylaşılabilir görsel) | — | planned |
+| M2.3 | Harcama geçmişi grafiği | — | planned |
 
 ### M3 — Bağımlılık döngüsü (taslak)
 
@@ -65,3 +65,4 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 | 2026-08-18 | Deploy: Render free (web, blueprint) + Neon free (PG) + GitHub Actions cron (günlük ingest 07:30 UTC) | Fly.io CLI ister → lokal ortam yok, elenir; Render/Neon tamamen web UI. Render cron ücretli → ücretsiz Actions cron, desen zaten kurulu. Neon URL öneki `postgresql+psycopg://` yapılmalı (psycopg3). Ödünleşim: free instance ~15 dk'da uyur, ilk istek 30–60 sn |
 | 2026-08-18 | **M1.7 deployed:** canlı URL https://enflasyonum-7gcn.onrender.com — kanıt: deploy logunda `/health` 200 + ilk manuel daily-ingest yeşil. İlk deploy denemesi kırmızıydı: Render blueprint `sync:false` env değişkenini sormadı → `DATABASE_URL` elle Environment'a girildi; ayrıca ilk ingest koşusu secret'a çift-şemalı URL yapıştırıldığı için düştü, secret düzeltilince yeşil | Deploy iki bağımsız kanıtla kapatılır: health ucu + zamanlanmış iş. Neon şifresi sohbete düştü → reset password borcu kayda geçirildi |
 | 2026-08-18 | **M1.5+M1.6 verified:** Umut canlı URL'de gördü (ekran görüntüsü): %31.75 vs %31.75, pencere 2025-07 → 2026-07, sepet 2026-08 (gıda 50 TL %100), "Bu ayın toplamı: 50.00 TL". Canlı Neon DB'de gerçek EVDS verisiyle hesap doğru çalışıyor | `verified` = gerçek kullanıcı, gerçek veri, gerçek ortam. Yıllık %31.75, EVDS 2025-07→2026-07 penceresinin gerçek değeri |
+| 2026-08-18 | **M2.1 (PR #9, `a7bd34f`):** 13 ECOICOP bölüm alt endeksi — EVDS `bie_tukfiy2025` grubundan `TP.TUKFIY2025.01`–`.13`; kategori adı → bölüm eşlemesi ~60 anahtarlık Türkçe sözlükle exact-match (`series.py`), eşleşmeyen kategori manşete düşer ve ekranda `*` ile işaretlenir; `official_cpi` benzersizliği `(series_code, period)` oldu (migration 0003, SQLite batch + PG constraint drop); ingest tek koşuda 14 seri çeker. Türkçe İ tuzağı: `"KOZMETİK".lower()` → `kozmeti̇k` (U+0307) ≠ `kozmetik` — normalizasyon app yazım katmanında, testte büyük-İ vakası bilinçli dışarıda | Ürünün varlık sebebi "senin enflasyonun farklı" iddiası; manşet-fallback ile iki sayı hep eşitti. Exact-match sözlük fuzzy eşlemeden öngörülebilir; yanlış pozitif eşleme yanlış endeksten kötüdür. `*` işareti hesap şeffaflığı ilkesinin devamı |
