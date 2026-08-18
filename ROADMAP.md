@@ -6,8 +6,8 @@
 ## ŞU AN NEREDEYİZ
 
 **Aşama:** M2 — veri derinliği (2026-08-18).
-**Son biten:** M2.1 **tested** (2026-08-18) — PR #9 squash merge (`a7bd34f`), CI 3/3 yeşil (Py 3.11/3.12/3.13, PG16+SQLite). 13 ECOICOP bölüm alt endeksi eklendi; kişisel endeks artık kategori bazında kendi alt serisiyle hesaplanıyor → kişisel ≠ resmi ayrışması mümkün.
-**Sıradaki tek iş (Umut, ~2 dk):** Actions → daily-ingest → Run workflow → yeşil bekle → https://enflasyonum-7gcn.onrender.com yenile → kozmetik-ağırlıklı sepette kişisel sayının resmiden ayrıştığını gör + screenshot = M2.1 **verified**. Ayrıca 14 gün harcama girişi (M1 kapanışı, ~2026-09-01).
+**Son biten:** M2.1 **verified** (2026-08-18) — Umut canlı sitede gördü (ekran görüntüsü): kişisel **%23.05** vs resmi **%31.75**, fark **-8.70 puan** (kozmetik-ağırlıklı sepet, 551/601 TL). daily-ingest 14 seriyi Neon'a indirdi; kişisel ≠ resmi ayrışması üretimde çalışıyor. PR #9 merge `a7bd34f`, CI 3/3 yeşil.
+**Sıradaki iş:** 14 gün harcama girişi (M1 Done kapanışı, ~2026-09-01); kod tarafında M2.2 (paylaşılabilir aylık özet kartı).
 **Açık güvenlik borcu:** Neon şifresi sohbete düştü → reset password + Render `DATABASE_URL` + GitHub secret `LIVE_DATABASE_URL` güncellemesi.
 
 ## Milestone'lar
@@ -33,7 +33,7 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 
 | # | İş | Kabul kriteri | Durum |
 |---|---|---|---|
-| M2.1 | Kategori bazlı alt endeksler (13 ECOICOP bölümü, EVDS `bie_tukfiy2025`) | kişisel ≠ resmi ayrışması canlıda görünür; eşleşmeyen kategori `*` ile manşete düşer | tested (CI) — canlı doğrulama: sub-seri ingest + Umut screenshot bekliyor |
+| M2.1 | Kategori bazlı alt endeksler (13 ECOICOP bölümü, EVDS `bie_tukfiy2025`) | kişisel ≠ resmi ayrışması canlıda görünür; eşleşmeyen kategori `*` ile manşete düşer | **verified** (canlı: %23.05 ≠ %31.75, 2026-08-18) |
 | M2.2 | Aylık özet kartı (paylaşılabilir görsel) | — | planned |
 | M2.3 | Harcama geçmişi grafiği | — | planned |
 
@@ -66,3 +66,4 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 | 2026-08-18 | **M1.7 deployed:** canlı URL https://enflasyonum-7gcn.onrender.com — kanıt: deploy logunda `/health` 200 + ilk manuel daily-ingest yeşil. İlk deploy denemesi kırmızıydı: Render blueprint `sync:false` env değişkenini sormadı → `DATABASE_URL` elle Environment'a girildi; ayrıca ilk ingest koşusu secret'a çift-şemalı URL yapıştırıldığı için düştü, secret düzeltilince yeşil | Deploy iki bağımsız kanıtla kapatılır: health ucu + zamanlanmış iş. Neon şifresi sohbete düştü → reset password borcu kayda geçirildi |
 | 2026-08-18 | **M1.5+M1.6 verified:** Umut canlı URL'de gördü (ekran görüntüsü): %31.75 vs %31.75, pencere 2025-07 → 2026-07, sepet 2026-08 (gıda 50 TL %100), "Bu ayın toplamı: 50.00 TL". Canlı Neon DB'de gerçek EVDS verisiyle hesap doğru çalışıyor | `verified` = gerçek kullanıcı, gerçek veri, gerçek ortam. Yıllık %31.75, EVDS 2025-07→2026-07 penceresinin gerçek değeri |
 | 2026-08-18 | **M2.1 (PR #9, `a7bd34f`):** 13 ECOICOP bölüm alt endeksi — EVDS `bie_tukfiy2025` grubundan `TP.TUKFIY2025.01`–`.13`; kategori adı → bölüm eşlemesi ~60 anahtarlık Türkçe sözlükle exact-match (`series.py`), eşleşmeyen kategori manşete düşer ve ekranda `*` ile işaretlenir; `official_cpi` benzersizliği `(series_code, period)` oldu (migration 0003, SQLite batch + PG constraint drop); ingest tek koşuda 14 seri çeker. Türkçe İ tuzağı: `"KOZMETİK".lower()` → `kozmeti̇k` (U+0307) ≠ `kozmetik` — normalizasyon app yazım katmanında, testte büyük-İ vakası bilinçli dışarıda | Ürünün varlık sebebi "senin enflasyonun farklı" iddiası; manşet-fallback ile iki sayı hep eşitti. Exact-match sözlük fuzzy eşlemeden öngörülebilir; yanlış pozitif eşleme yanlış endeksten kötüdür. `*` işareti hesap şeffaflığı ilkesinin devamı |
+| 2026-08-18 | **M2.1 verified:** Umut daily-ingest'i elle tetikledi (14 seri Neon'a indi), canlı ekran görüntüsü: kişisel **%23.05** vs resmi **%31.75** (fark -8.70 puan; kozmetik 551 TL + gıda 50 TL sepeti). Kozmetik alt endeksi (bölüm 13) son 12 ayda manşetten yavaş artmış → ürün iddiası üretimde kanıtlandı | `verified` = gerçek kullanıcı + gerçek sepet + gerçek EVDS alt serileri. İlk canlı ayrışma kanıtı; ekranda `*` yok = her iki kategori de kendi alt endeksiyle eşleşti |
