@@ -96,3 +96,45 @@ def test_fetch_raises_on_403():
     client = httpx.Client(transport=httpx.MockTransport(handler))
     with pytest.raises(httpx.HTTPStatusError):
         ingest.fetch_cpi_items("bad", date(2024, 8, 1), date(2026, 8, 18), client=client)
+
+
+def test_fetch_custom_series_in_url():
+    """M2.1: series_code parametresi URL'e yansımalı."""
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        return httpx.Response(200, content=json.dumps({"items": []}))
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    ingest.fetch_cpi_items(
+        "test-key",
+        date(2024, 8, 1),
+        date(2026, 8, 18),
+        series_code="TP.TUKFIY2025.13",
+        client=client,
+    )
+    assert "series=TP.TUKFIY2025.13" in captured["url"]
+
+
+def test_parse_items_custom_value_key():
+    """M2.1: alt seri JSON anahtarıyla ayrıştırma."""
+    items = [{"Tarih": "2025-6", "TP_TUKFIY2025_13": "97.5"}]
+    parsed = ingest.parse_items(items, value_key="TP_TUKFIY2025_13")
+    assert parsed == [(date(2025, 6, 1), Decimal("97.5"))]
+
+
+def test_ingest_same_period_two_series_no_conflict(session):
+    """M2.1: aynı dönem iki seriye yazılır, birbirini ezmez."""
+    parsed_headline = [(date(2025, 6, 1), Decimal("100"))]
+    parsed_sub = [(date(2025, 6, 1), Decimal("90"))]
+    assert ingest.ingest_cpi(session, parsed_headline) == 1
+    assert ingest.ingest_cpi(session, parsed_sub, series_code="TP.TUKFIY2025.13") == 1
+
+    headline_rows = crud.list_official_cpi(session)
+    assert len(headline_rows) == 1
+    assert headline_rows[0].index_value == Decimal("100")
+
+    sub_rows = crud.list_official_cpi(session, series_code="TP.TUKFIY2025.13")
+    assert len(sub_rows) == 1
+    assert sub_rows[0].index_value == Decimal("90")

@@ -1,4 +1,4 @@
-"""Temel CRUD işlemleri — M1.2 kapsamı."""
+"""Temel CRUD işlemleri — M1.2 kapsamı (M2.1: official_cpi çoklu seri)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from enflasyonum.models import Category, Expense, OfficialCPI
+from enflasyonum.series import HEADLINE_SERIES
 
 
 def get_or_create_category(session: Session, name: str) -> Category:
@@ -71,10 +72,22 @@ def upsert_official_cpi(
     period: date,
     index_value: Decimal,
     source: str = "TUIK",
+    series_code: str = HEADLINE_SERIES,
 ) -> OfficialCPI:
-    row = session.scalar(select(OfficialCPI).where(OfficialCPI.period == period))
+    """Dönem + seri çiftine göre upsert (M2.1: teklik artık bu çiftte)."""
+    row = session.scalar(
+        select(OfficialCPI).where(
+            OfficialCPI.period == period,
+            OfficialCPI.series_code == series_code,
+        )
+    )
     if row is None:
-        row = OfficialCPI(period=period, index_value=index_value, source=source)
+        row = OfficialCPI(
+            period=period,
+            index_value=index_value,
+            source=source,
+            series_code=series_code,
+        )
         session.add(row)
     else:
         row.index_value = index_value
@@ -84,5 +97,14 @@ def upsert_official_cpi(
     return row
 
 
-def list_official_cpi(session: Session) -> list[OfficialCPI]:
-    return list(session.scalars(select(OfficialCPI).order_by(OfficialCPI.period)))
+def list_official_cpi(
+    session: Session, series_code: str = HEADLINE_SERIES
+) -> list[OfficialCPI]:
+    """Verilen serinin satırları, dönem sırasıyla (varsayılan: manşet TÜFE)."""
+    return list(
+        session.scalars(
+            select(OfficialCPI)
+            .where(OfficialCPI.series_code == series_code)
+            .order_by(OfficialCPI.period)
+        )
+    )

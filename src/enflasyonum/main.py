@@ -2,6 +2,7 @@
 
 M1.3 kapsamı: /health + tek sayfalık harcama giriş formu.
 M1.6 kapsamı: kıyas bloğu — "senin %Y vs resmi %X" tek ekranda.
+M2.1 kapsamı: kategori satırlarında ECOICOP alt endeks enflasyonu.
 GET /  -> form, kıyas bloğu, son harcamalar, bu ayın toplamı
 POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
 """
@@ -21,9 +22,12 @@ from enflasyonum.db import create_session_factory
 from enflasyonum.models import Category, Expense, OfficialCPI
 from enflasyonum.personal_index import (
     PersonalIndexError,
+    category_relatives_from_db,
+    category_weights,
     compute_personal_index,
     headline_relative,
 )
+from enflasyonum.series import HEADLINE_SERIES
 
 app = FastAPI(
     title="Enflasyonumdan ne haber?",
@@ -61,15 +65,21 @@ def _parse_amount(raw: str) -> Decimal:
 
 
 def _comparison_context(session: Session) -> dict:
-    """Kıyas bloğu verisi (M1.6).
+    """Kıyas bloğu verisi (M1.6 + M2.1).
 
     Pencere: elimizdeki son resmi TÜFE dönemi (current) vs 12 ay öncesi
     (base) — yıllık enflasyon. Sepet: harcama içeren son ay
     (``weights_period``); resmi veri ~1 ay geriden geldiği için sepet ayı
-    pencereden bilinçli olarak ayrıdır. Veri eksikse ``comparison=None`` +
-    Türkçe ipucu döner; ana sayfa hiçbir koşulda 500 vermez.
+    pencereden bilinçli olarak ayrıdır. M2.1: alt endeksi olan kategoriler
+    kendi görelisini kullanır; kalanı manşete düşer. Veri eksikse
+    ``comparison=None`` + Türkçe ipucu döner; ana sayfa hiçbir koşulda
+    500 vermez.
     """
-    latest_cpi = session.scalar(select(func.max(OfficialCPI.period)))
+    latest_cpi = session.scalar(
+        select(func.max(OfficialCPI.period)).where(
+            OfficialCPI.series_code == HEADLINE_SERIES
+        )
+    )
     latest_expense = session.scalar(select(func.max(Expense.spent_at)))
 
     if latest_cpi is None:
@@ -91,8 +101,15 @@ def _comparison_context(session: Session) -> dict:
         official_pct = ((headline_relative(session, base, current) - 1) * 100).quantize(
             TWO_DP
         )
+        category_relatives = category_relatives_from_db(
+            session, base, current, category_weights(session, basket)
+        )
         result = compute_personal_index(
-            session, base=base, current=current, weights_period=basket
+            session,
+            base=base,
+            current=current,
+            category_relatives=category_relatives,
+            weights_period=basket,
         )
     except PersonalIndexError as exc:
         return {"comparison": None, "comparison_hint": f"Kıyas hesaplanamadı: {exc}"}
@@ -104,6 +121,8 @@ def _comparison_context(session: Session) -> dict:
             "category": cat,
             "amount": amount,
             "share_pct": (amount / total * 100).quantize(TWO_DP),
+            "relative_pct": ((result.relatives[cat] - 1) * 100).quantize(TWO_DP),
+            "own_series": cat in category_relatives,
         }
         for cat, amount in sorted(
             result.weights.items(), key=lambda kv: kv[1], reverse=True
