@@ -1,0 +1,62 @@
+name: live-ingest
+
+# M1.4 canlı doğrulama: EVDS'den gerçek TÜFE çekimi.
+# Bu dosyanın push'u tetikler; sonuç artifacts/live-ingest.txt olarak commit'lenir.
+on:
+  push:
+    paths:
+      - ".github/workflows/live-ingest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "sqlite:///live.db"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Migrate
+        run: alembic upgrade head
+
+      - name: Run live ingest twice (idempotency check)
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+        run: |
+          set +e
+          python -m enflasyonum.ingest 24 > run1.txt 2>&1
+          rc1=$?
+          python -m enflasyonum.ingest 24 > run2.txt 2>&1
+          rc2=$?
+          mkdir -p artifacts
+          {
+            echo "# Canlı EVDS ingest doğrulaması"
+            echo "tarih: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "exit codes: run1=$rc1 run2=$rc2"
+            echo ""
+            echo "--- KOSU 1 ---"
+            cat run1.txt
+            echo ""
+            echo "--- KOSU 2 (idempotency) ---"
+            cat run2.txt
+          } > artifacts/live-ingest.txt
+          exit 0
+
+      - name: Commit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/live-ingest.txt
+          git commit -m "ci: canlı ingest sonucu [skip ci]" || echo "no changes"
+          git pull --rebase origin main
+          git push
