@@ -1,9 +1,12 @@
-# enflasyonum
+# Enflasyonumdan ne haber?
 
 **Kişisel enflasyon endeksi.** TÜİK "%X" der; senin sepetin farklıdır. Bu uygulama
 kendi harcamalarını girip **kendi enflasyon oranını** hesaplamanı ve resmi
 endekslerle (TÜİK TÜFE) kıyaslamanı sağlar.
 
+> Repo slug'ı `enflasyonum` (kısa, URL/import dostu); uygulama adı
+> **"Enflasyonumdan ne haber?"**
+>
 > Durum: 🚧 M1 (dikey dilim) geliştirme aşamasında — henüz çalışan sürüm yok.
 > Güncel durum için [ROADMAP.md](ROADMAP.md).
 
@@ -21,6 +24,22 @@ sorusuna doğrulanabilir bir cevap verir.
 
 Kapsam DIŞI (şimdilik): OCR/fiş okuma, mobil uygulama mağazası, çoklu kullanıcı
 yönetim paneli, tahmin/ML.
+
+## Kurulum (geliştirme)
+
+```bash
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+uvicorn enflasyonum.main:app --reload
+# http://127.0.0.1:8000/health
+```
+
+Testler ve lint:
+
+```bash
+pytest
+ruff check src tests
+```
 
 ## Mimari (planlanan)
 
