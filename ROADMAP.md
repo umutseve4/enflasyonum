@@ -6,8 +6,8 @@
 ## ŞU AN NEREDEYİZ
 
 **Aşama:** M1 — dikey dilim (2026-08-18).
-**Son biten:** M1.2 — PG şeması + Alembic migration + testli CRUD (PR #2, merge `971b6dc`, CI 3/3 yeşil, gerçek PostgreSQL 16'ya karşı).
-**Sıradaki tek iş:** M1.3 — harcama giriş formu (tek sayfa web UI).
+**Son biten:** M1.3 — harcama giriş formu, tek sayfa web UI (PR #3, merge `e4ebfaf`, CI 3/3 yeşil).
+**Sıradaki tek iş:** M1.4 — TÜİK/EVDS TÜFE ingestion job.
 
 ## Milestone'lar
 
@@ -19,7 +19,7 @@ Tek akış: harcama gir → ay sonunda kişisel endeks + TÜİK kıyası tek ekr
 |---|---|---|---|
 | M1.1 | FastAPI iskeleti + `/health` + CI (pytest+ruff) | CI yeşil, endpoint 200 döner | verified |
 | M1.2 | PostgreSQL şeması: `expenses`, `categories`, `official_cpi` | migration koşuyor, testli CRUD | verified |
-| M1.3 | Harcama giriş formu (tek sayfa web UI) | tarayıcıdan harcama eklenebiliyor | planned |
+| M1.3 | Harcama giriş formu (tek sayfa web UI) | tarayıcıdan harcama eklenebiliyor | verified |
 | M1.4 | TÜİK/EVDS TÜFE ingestion job | son 24 ay TÜFE DB'de, idempotent | planned |
 | M1.5 | Kişisel endeks hesap motoru (Laspeyres) | birim testli, elle doğrulanmış örnek | planned |
 | M1.6 | Kıyas ekranı: "senin %Y vs resmi %X" | tek ekranda iki sayı | planned |
@@ -49,3 +49,5 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 | 2026-08-18 | App adı: "Enflasyonumdan ne haber?" (repo slug: `enflasyonum`) | URL/import uyumluluğu; marka adı README'de |
 | 2026-08-18 | ORM: SQLAlchemy 2.0 + Alembic; para alanları `Numeric` (asla float) | Migration disiplini + kuruş hassasiyeti (float yuvarlama hatası enflasyon hesabını bozar) |
 | 2026-08-18 | CI testleri gerçek PostgreSQL 16 servis konteynerine karşı koşar | "SQLite'ta geçti, PG'de patladı" sınıfı hataları CI'da yakalamak |
+| 2026-08-18 | POST sonrası 303 redirect (PRG deseni) | F5 çift kayıt üretmesin; form UX'in temel disiplini |
+| 2026-08-18 | Tutar girişinde virgül desteği (`42,50` → `42.50`) | TR kullanıcı klavye alışkanlığı; Decimal'e normalize edilir |
