@@ -1,0 +1,17 @@
+# Canlı EVDS ingest doğrulaması
+tarih: 2026-08-18T16:29:57Z
+exit codes: run1=0 run2=0
+
+--- KOSU 1 ---
+===== OTOMATIK KONTROL =====
+islenen donem: 18
+tablodaki satir: 18
+aralik: 2024-08-01 .. 2026-01-01
+sonuc: PASS
+
+--- KOSU 2 (idempotency) ---
+===== OTOMATIK KONTROL =====
+islenen donem: 18
+tablodaki satir: 18
+aralik: 2024-08-01 .. 2026-01-01
+sonuc: PASS
