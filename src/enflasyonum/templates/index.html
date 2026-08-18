@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enflasyonumdan ne haber?</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.4rem; }
+    form { display: grid; gap: .5rem; grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem; }
+    form input, form button { padding: .5rem; font-size: 1rem; }
+    form .full { grid-column: 1 / -1; }
+    .error { color: #c0392b; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: .4rem .3rem; border-bottom: 1px solid #8884; }
+    td.amount, th.amount { text-align: right; font-variant-numeric: tabular-nums; }
+    .total { margin: .8rem 0; font-weight: 700; }
+    footer { margin-top: 2rem; font-size: .8rem; opacity: .6; }
+  </style>
+</head>
+<body>
+  <h1>Enflasyonumdan ne haber?</h1>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/expenses">
+    <input class="full" name="description" placeholder="Açıklama (örn. süt)" required>
+    <input name="amount" inputmode="decimal" placeholder="Tutar (örn. 42,50)" required>
+    <input name="category" placeholder="Kategori (örn. gıda)" required>
+    <input name="spent_at" type="date" value="{{ today.isoformat() }}" required>
+    <button class="full" type="submit">Kaydet</button>
+  </form>
+
+  <p class="total">Bu ayın toplamı: {{ monthly_total }} TL</p>
+
+  <table>
+    <thead>
+      <tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th class="amount">Tutar</th></tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr>
+        <td>{{ e.spent_at.isoformat() }}</td>
+        <td>{{ e.category }}</td>
+        <td>{{ e.description }}</td>
+        <td class="amount">{{ e.amount }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">Henüz harcama yok — ilk kaydı yukarıdan gir.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <footer>enflasyonum v{{ version }}</footer>
+</body>
+</html>
