@@ -56,7 +56,7 @@
       <summary>Bu sayı nereden geldi?</summary>
       <table>
         <thead>
-          <tr><th>Kategori</th><th class="amount">Harcama</th><th class="amount">Pay</th></tr>
+          <tr><th>Kategori</th><th class="amount">Harcama</th><th class="amount">Pay</th><th class="amount">Enflasyonu</th></tr>
         </thead>
         <tbody>
           {% for w in comparison.weight_rows %}
@@ -64,14 +64,16 @@
             <td>{{ w.category }}</td>
             <td class="amount">{{ w.amount }} TL</td>
             <td class="amount">%{{ w.share_pct }}</td>
+            <td class="amount">%{{ w.relative_pct }}{% if not w.own_series %}*{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
       <p class="meta">
-        M1 notu: kategori bazlı resmi alt endeksler henüz bağlı değil; tüm
-        kategoriler manşet TÜFE oranını kullanıyor, bu yüzden iki sayı şimdilik
-        eşit. M2'de "senin gıda enflasyonun" kategorilere göre ayrışacak.
+        M2 notu: kategori adı ECOICOP bölümüyle eşleşiyorsa (örn. gıda,
+        ulaşım, kozmetik, kira) o kategorinin kendi resmi alt endeksi
+        kullanılır; <strong>*</strong> işaretli satırlar eşleşmedi ve manşet
+        TÜFE oranına düştü. Kişisel sayı bu yüzden artık resmiden ayrışabilir.
       </p>
     </details>
     {% else %}
