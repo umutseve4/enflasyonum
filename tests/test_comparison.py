@@ -3,6 +3,10 @@
 Kıyas mantığı: pencere = son resmi TÜFE dönemi vs 12 ay öncesi (yıllık),
 sepet = harcama içeren son ay (weights_period). Sayfa veri eksikken 500
 vermek yerine Türkçe ipucu gösterir.
+
+M2.1: kategori adı ECOICOP bölümüyle eşleşiyorsa kendi alt endeksi
+kullanılır — kişisel sayı resmiden ayrışır; eşleşmeyenler manşete düşer
+ve ekranda * ile işaretlenir.
 """
 
 import os
@@ -179,3 +183,68 @@ def test_hint_when_base_period_missing(session, client):
     assert r.status_code == 200
     assert "Kıyas hesaplanamadı" in r.text
     assert "2025-08" in r.text
+
+
+# ---------------------------------------------------------------------------
+# M2.1: kategori alt endeksleri — kişisel sayı resmiden ayrışır
+# ---------------------------------------------------------------------------
+
+
+def test_category_subindices_diverge_from_headline(session, client):
+    """Kozmetik %50, gıda %20 enflasyonla kişisel = %47.50 ≠ resmi %31.75.
+
+    Hesap: sepet kozmetik 550 + gıda 50 = 600 TL;
+    endeks = 100*(550*1.5 + 50*1.2)/600 = 147.5 -> %47.50.
+    """
+    base = date(2025, 8, 1)
+    cur = date(2026, 8, 1)
+    crud.upsert_official_cpi(session, period=base, index_value=Decimal("100"))
+    crud.upsert_official_cpi(session, period=cur, index_value=Decimal("131.75"))
+    crud.upsert_official_cpi(
+        session, period=base, index_value=Decimal("100"), series_code="TP.TUKFIY2025.13"
+    )
+    crud.upsert_official_cpi(
+        session, period=cur, index_value=Decimal("150"), series_code="TP.TUKFIY2025.13"
+    )
+    crud.upsert_official_cpi(
+        session, period=base, index_value=Decimal("100"), series_code="TP.TUKFIY2025.01"
+    )
+    crud.upsert_official_cpi(
+        session, period=cur, index_value=Decimal("120"), series_code="TP.TUKFIY2025.01"
+    )
+    crud.add_expense(
+        session,
+        category_name="kozmetik",
+        description="parfüm",
+        amount=Decimal("550.00"),
+        spent_at=date(2026, 8, 15),
+    )
+    crud.add_expense(
+        session,
+        category_name="gıda",
+        description="yumurta",
+        amount=Decimal("50.00"),
+        spent_at=date(2026, 8, 16),
+    )
+
+    page = client.get("/").text
+    assert "%47.50" in page  # kişisel — artık resmiden farklı
+    assert "%31.75" in page  # resmi manşet
+    assert "%50.00" in page  # kozmetik kendi alt endeksi
+    assert "%20.00" in page  # gıda kendi alt endeksi
+
+
+def test_unmatched_category_marked_with_star(session, client):
+    """Eşleşmeyen kategori manşete düşer ve * ile işaretlenir."""
+    crud.upsert_official_cpi(session, period=date(2025, 8, 1), index_value=Decimal("100"))
+    crud.upsert_official_cpi(session, period=date(2026, 8, 1), index_value=Decimal("110"))
+    crud.add_expense(
+        session,
+        category_name="zımbırtı",
+        description="bilinmeyen şey",
+        amount=Decimal("100.00"),
+        spent_at=date(2026, 8, 15),
+    )
+
+    page = client.get("/").text
+    assert "%10.00*" in page

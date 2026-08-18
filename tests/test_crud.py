@@ -89,3 +89,20 @@ def test_official_cpi_upsert_idempotent(session):
     rows = crud.list_official_cpi(session)
     assert len(rows) == 1
     assert rows[0].index_value == Decimal("2550.0")
+
+
+def test_official_cpi_same_period_different_series(session):
+    """M2.1: aynı dönem, farklı seri -> iki ayrı satır, çakışma yok."""
+    p = date(2026, 7, 1)
+    crud.upsert_official_cpi(session, period=p, index_value=Decimal("100"))
+    crud.upsert_official_cpi(
+        session, period=p, index_value=Decimal("90"), series_code="TP.TUKFIY2025.13"
+    )
+
+    headline_rows = crud.list_official_cpi(session)
+    assert len(headline_rows) == 1
+    assert headline_rows[0].index_value == Decimal("100")
+
+    sub_rows = crud.list_official_cpi(session, series_code="TP.TUKFIY2025.13")
+    assert len(sub_rows) == 1
+    assert sub_rows[0].index_value == Decimal("90")
