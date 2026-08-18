@@ -17,6 +17,11 @@ M2'de ECOICOP alt endeksleri (EVDS ``bie_tukfiy2025`` grubu) kategori
 görelilerini sağlayacak — ``category_relatives`` parametresi bu genişlemeyi
 şimdiden destekler; motor kodu değişmeden kalır.
 
+Ek karar (M1.6): resmi TÜFE ~1 ay geriden yayımlanır; kullanıcı bugün
+harcama girer ama son resmi dönem geçmiştedir. ``weights_period`` parametresi
+sepet ayını fiyat penceresinden ayırır: ağırlıklar kullanıcının güncel
+sepetinden, fiyat görelisi resmi verinin kapsadığı pencereden gelir.
+
 Tüm aritmetik ``Decimal`` ile yapılır (float yasak — karar kaydı: float
 yuvarlama hatası enflasyon hesabını bozar).
 """
@@ -137,17 +142,25 @@ def compute_personal_index(
     base: date,
     current: date,
     category_relatives: Mapping[str, Decimal] | None = None,
+    weights_period: date | None = None,
 ) -> PersonalIndexResult:
     """Uçtan uca hesap: DB'den ağırlıklar + göreliler -> Laspeyres endeksi.
 
     ``category_relatives`` verilirse (M2: ECOICOP alt endeks görelileri)
     eşleşen kategoriler onu kullanır; verilmeyen her kategori manşet TÜFE
     görelisine düşer (M1 davranışı: tüm kategoriler manşete düşer).
+
+    ``weights_period`` verilirse sepet ağırlıkları o aydan alınır; fiyat
+    penceresi (``base`` -> ``current``) değişmez. M1.6 kullanımı: resmi
+    TÜFE geriden yayımlandığı için sepet = kullanıcının son harcama ayı,
+    pencere = resmi verinin son 12 ayı. Verilmezse klasik davranış:
+    sepet ayı = baz ay.
     """
-    weights = category_weights(session, base)
+    basket = weights_period or base
+    weights = category_weights(session, basket)
     if not weights:
         raise PersonalIndexError(
-            f"{base.year}-{base.month:02d} baz doneminde hic harcama yok"
+            f"{basket.year}-{basket.month:02d} doneminde hic harcama yok"
         )
 
     headline = headline_relative(session, base, current)
