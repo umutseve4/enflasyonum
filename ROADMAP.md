@@ -6,8 +6,8 @@
 ## ŞU AN NEREDEYİZ
 
 **Aşama:** M1 — dikey dilim (2026-08-18).
-**Son biten:** M1.6 — kıyas ekranı, **tested** (PR #7, merge `e2ed1dd`, CI 3/3 yeşil, 6 yeni test; toplam 17+ test). `verified` etiketi M1.5+M1.6 için Umut tarayıcıda gerçek veriyle iki sayıyı görünce verilecek (M1.7 deploy sonrası).
-**Sıradaki tek iş:** M1.7 — deploy (ücretsiz tier: Fly.io/Render + Neon/Supabase PG).
+**Son biten:** M1.7 deploy altyapısı, **implemented** (PR #8, merge `80964a0`, CI 3/3 yeşil): `render.yaml` blueprint + `daily-ingest.yml` cron (07:30 UTC) + `DEPLOY.md` kılavuzu.
+**Sıradaki tek iş:** Umut'un DEPLOY.md'deki 3 adımlık tık listesi (Neon → Render → GitHub secret). Sonra `/health` 200 + ilk manuel `daily-ingest` yeşili = `deployed`; tarayıcıda iki sayı = M1.5+M1.6 `verified`.
 
 ## Milestone'lar
 
@@ -23,7 +23,7 @@ Tek akış: harcama gir → ay sonunda kişisel endeks + TÜİK kıyası tek ekr
 | M1.4 | TÜİK/EVDS TÜFE ingestion job | son 24 ay TÜFE DB'de, idempotent | verified |
 | M1.5 | Kişisel endeks hesap motoru (Laspeyres) | birim testli, elle doğrulanmış örnek | tested |
 | M1.6 | Kıyas ekranı: "senin %Y vs resmi %X" | tek ekranda iki sayı | tested |
-| M1.7 | Deploy (ücretsiz tier: Fly.io/Render + Neon/Supabase PG) | telefondan URL ile erişilebiliyor | planned |
+| M1.7 | Deploy (Render free + Neon PG + Actions cron) | telefondan URL ile erişilebiliyor | implemented |
 
 **M1 Done tanımı:** Umut 14 gün kendi harcamasını girmiş ve app ilk kişisel
 enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
@@ -62,3 +62,4 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 | 2026-08-18 | Canlı doğrulama deseni: workflow edit-push → Actions koşusu → sonuç `artifacts/*.txt` olarak bot commit'i | Umut'un lokal ortamı yok; tüm canlı kanıtlar repo içinde, tekrarlanabilir |
 | 2026-08-18 | Kişisel endeks = harcama-ağırlıklı Laspeyres: baz ay kategori harcamaları (w_i) × resmi fiyat görelileri (R_i); `L = 100·Σ(w_i·R_i)/Σ(w_i)`. M1'de tüm kategoriler manşet TÜFE görelisine düşer; `category_relatives` parametresi M2 ECOICOP alt endekslerine hazır | Harcama kaydında miktar/birim fiyat yok → madde bazlı Laspeyres hesaplanamaz; ONS/Eurostat kişisel enflasyon hesaplayıcılarıyla aynı yöntem, motor M2'de değişmeden kalır |
 | 2026-08-18 | Kıyas penceresi = son resmi TÜFE dönemi vs 12 ay öncesi (yıllık); sepet ayı ≠ baz ayı — motora geriye-uyumlu `weights_period` parametresi eklendi (ağırlıklar kullanıcının son harcama ayından, göreli resmi pencereden) | Resmi TÜFE ~1 ay geriden yayımlanır; kullanıcının güncel sepeti pencere baz ayına denk gelmez. Kıyas bloğu asla 500 vermez: veri eksikse Türkçe ipucu gösterilir. M1'de iki sayı eşittir (manşet fallback) — ekranda açıkça not edildi, M2'de ayrışır |
+| 2026-08-18 | Deploy: Render free (web, blueprint) + Neon free (PG) + GitHub Actions cron (günlük ingest 07:30 UTC) | Fly.io CLI ister → lokal ortam yok, elenir; Render/Neon tamamen web UI. Render cron ücretli → ücretsiz Actions cron, desen zaten kurulu. Neon URL öneki `postgresql+psycopg://` yapılmalı (psycopg3). Ödünleşim: free instance ~15 dk'da uyur, ilk istek 30–60 sn |
