@@ -4,6 +4,7 @@ name: verify-live
 # kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
 # NOT: /export.csv kişisel harcama verisi içerebilir — gövdesi ASLA kanıt
 # dosyasına yazılmaz; yalnız güvenli metadata (kod, boyut, hexhead, boolean'lar).
+# Yeniden tetikleme: 2026-08-19 (ilk koşuda Render henüz v0.4.0'daydı, /export.csv 404)
 on:
   push:
     paths:
