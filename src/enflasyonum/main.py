@@ -3,7 +3,9 @@
 M1.3 kapsamı: /health + tek sayfalık harcama giriş formu.
 M1.6 kapsamı: kıyas bloğu — "senin %Y vs resmi %X" tek ekranda.
 M2.1 kapsamı: kategori satırlarında ECOICOP alt endeks enflasyonu.
+M2.2 kapsamı: /card.svg — paylaşılabilir aylık özet kartı.
 GET /  -> form, kıyas bloğu, son harcamalar, bu ayın toplamı
+GET /card.svg -> kıyası tek görselde sunan SVG kart
 POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
 """
 
@@ -12,12 +14,13 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from enflasyonum import __version__, crud
+from enflasyonum.card import render_card_svg
 from enflasyonum.db import create_session_factory
 from enflasyonum.models import Category, Expense, OfficialCPI
 from enflasyonum.personal_index import (
@@ -178,6 +181,23 @@ def health() -> dict[str, str]:
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "index.html", _index_context(session))
+
+
+@app.get("/card.svg")
+def card(session: Session = Depends(get_session)) -> Response:
+    """Paylaşılabilir aylık özet kartı (M2.2).
+
+    Ana sayfayla aynı kıyas verisini SVG olarak sunar; veri eksikse
+    ipucu kartı döner — asla 500 vermez. Cache kapalı: kart her istekte
+    güncel veriden üretilir.
+    """
+    ctx = _comparison_context(session)
+    svg = render_card_svg(ctx["comparison"], ctx["comparison_hint"], __version__)
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/expenses")
