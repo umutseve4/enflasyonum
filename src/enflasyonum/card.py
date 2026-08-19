@@ -51,8 +51,8 @@ def render_card_svg(
     """
     parts = [_svg_open()]
     parts.append(
-        f'  <text x="40" y="64" fill="#8ab4f8" font-family="system-ui, sans-serif" '
-        f'font-size="28" font-weight="700">Enflasyonumdan ne haber?</text>\n'
+        '  <text x="40" y="64" fill="#8ab4f8" font-family="system-ui, sans-serif" '
+        'font-size="28" font-weight="700">Enflasyonumdan ne haber?</text>\n'
     )
 
     if comparison is None:
