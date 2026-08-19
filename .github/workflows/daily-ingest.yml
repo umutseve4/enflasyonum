@@ -1,12 +1,19 @@
 # Günlük EVDS TÜFE ingest — canlı (Neon) veritabanına.
 # Render'ın cron'u ücretli; GitHub Actions cron ücretsiz ve desen zaten kurulu.
 # Gerekli repo secret'ları: EVDS_API_KEY, LIVE_DATABASE_URL
+# M3.2: ingest çıktısındaki level-triggered marker'dan bildirim issue'su açılır
+# (notify.py, idempotent). Schedule token'ı varsayılan read-only olduğundan
+# permissions bloğu şart.
 name: daily-ingest
 
 on:
   schedule:
     - cron: "30 7 * * *" # her gün 07:30 UTC (10:30 TR) — TÜİK ~10:00 TR'de açıklar
   workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
 
 concurrency:
   group: daily-ingest
@@ -32,5 +39,11 @@ jobs:
             echo 'LIVE_DATABASE_URL secret tanımlı değil — deploy tamamlanınca eklenecek.'
             exit 0
           fi
+          set -o pipefail
           alembic upgrade head
-          python -m enflasyonum.ingest 24
+          python -m enflasyonum.ingest 24 | tee ingest.log
+      - name: Bildirim (M3.2 — yeni TÜFE dönemi issue'su, idempotent)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python -m enflasyonum.notify ingest.log

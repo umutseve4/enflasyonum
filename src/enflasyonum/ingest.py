@@ -17,6 +17,10 @@ Kurallar:
 - Tarih formatı gg-aa-yyyy (EVDS zorunluluğu).
 - Yazım `upsert_official_cpi` ile yapılır → job idempotent: aynı ayı
   ikinci kez çekmek satır çiftlemez, günceller.
+- M3.2: her BAŞARILI koşu, DB'deki en son manşet dönemini makine-okur
+  marker olarak basar (level-triggered). Bildirim katmanı (notify.py)
+  idempotentliği kendisi sağlar; böylece geçici issue hatası ertesi gün
+  otomatik yeniden denenir. Karar kaydı: ROADMAP.md.
 
 Kullanım:
     EVDS_API_KEY=... python -m enflasyonum.ingest [ay_sayisi]
@@ -27,7 +31,7 @@ from __future__ import annotations
 import os
 import sys
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 import httpx
 from sqlalchemy.orm import Session
@@ -127,6 +131,32 @@ def ingest_cpi(
     return len(parsed)
 
 
+def latest_headline_marker(rows) -> tuple[date | None, Decimal | None]:
+    """M3.2: son manşet dönemi + aylık değişim yüzdesi (koşullu).
+
+    Aylık % yalnız sondan bir önceki satır TAM OLARAK bir önceki takvim
+    ayı ise hesaplanır (arada ay eksikse iki dönemin oranı aylık TÜFE
+    değildir — QA bulgu 3). Önceki endeks <= 0 ise bölme yapılmaz.
+    Decimal ile hesap, 2 hane ROUND_HALF_UP; float yasağı geçerli.
+    """
+    if not rows:
+        return None, None
+    last = rows[-1]
+    if len(rows) < 2:
+        return last.period, None
+    prev = rows[-2]
+    prev_year, prev_month = last.period.year, last.period.month - 1
+    if prev_month == 0:
+        prev_year, prev_month = prev_year - 1, 12
+    if prev.period != date(prev_year, prev_month, 1):
+        return last.period, None
+    prev_value = Decimal(str(prev.index_value))
+    if prev_value <= 0:
+        return last.period, None
+    pct = (Decimal(str(last.index_value)) / prev_value - 1) * 100
+    return last.period, pct.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def run(months: int = 24) -> int:
     """CLI girişi. 0 = PASS, 1 = FAIL döner. M2.1: 14 seriyi birden çeker."""
     api_key = os.environ.get("EVDS_API_KEY")
@@ -164,6 +194,13 @@ def run(months: int = 24) -> int:
         print(f"eksik seriler: {', '.join(eksik)}")
     status = "PASS" if not eksik else "FAIL"
     print(f"sonuc: {status}")
+    if status == "PASS":
+        # M3.2: level-triggered marker — bildirim katmanı (notify.py) okur.
+        period, pct = latest_headline_marker(rows)
+        if period is not None:
+            print(f"HEADLINE_LATEST_PERIOD={period:%Y-%m}")
+            if pct is not None:
+                print(f"HEADLINE_MOM_PCT={pct}")
     return 0 if status == "PASS" else 1
 
 
