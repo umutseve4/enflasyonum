@@ -5,9 +5,9 @@
 
 ## ŞU AN NEREDEYİZ
 
-**Aşama:** M2 — veri derinliği (2026-08-19).
-**Son biten:** M2.3 **tested** (2026-08-19) — harcama geçmişi grafiği `/history.svg` (PR #12, v0.4.0): son 12 ayın aylık toplamları çubuk grafik, sıfır ek bağımlılık, ana sayfaya gömülü. Aynı PR'da M2.2 QA borcu kapandı: 5 kart sözleşme testi (boyut/viewBox, ipucu escape, fallback Cache-Control, top-3 sınırı, yıldızsız satır). Canlı doğrulama bekliyor: Umut merge sonrası `/history.svg`'yi tarayıcıda açıp screenshot atacak → `verified`.
-**Sıradaki iş:** 14 gün harcama girişi (M1 Done kapanışı, ~2026-09-01); kod tarafında M3 taslağı (TÜİK açıklama günü bildirimi + CSV/Parquet dışa aktarma).
+**Aşama:** M3 — bağımlılık döngüsü (2026-08-19).
+**Son biten:** M2.3 **verified** (2026-08-19) — canlı `/history.svg` Actions kanıtıyla doğrulandı (`artifacts/live-history-verify.txt`: /health 200 v0.4.0, /history.svg 200 + `<svg`, /card.svg 200, SONUC: PASS). M3.1 **tested** (PR #13, v0.5.0): `/export.csv` CSV dökümü — UTF-8 BOM, RFC 4180, CSV injection savunması, 14 test.
+**Sıradaki iş:** M3.1 canlı doğrulama (verify-live.yml'a `/export.csv` probu ekle → Actions kanıtı) ve 14 gün harcama girişi (M1 Done kapanışı, ~2026-09-01); sonrasında M3.2 TÜİK açıklama günü bildirimi.
 **Açık güvenlik borcu:** Neon şifresi sohbete düştü → reset password + Render `DATABASE_URL` + GitHub secret `LIVE_DATABASE_URL` güncellemesi.
 
 ## Milestone'lar
@@ -35,12 +35,15 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 |---|---|---|---|
 | M2.1 | Kategori bazlı alt endeksler (13 ECOICOP bölümü, EVDS `bie_tukfiy2025`) | kişisel ≠ resmi ayrışması canlıda görünür; eşleşmeyen kategori `*` ile manşete düşer | **verified** (canlı: %23.05 ≠ %31.75, 2026-08-18) |
 | M2.2 | Aylık özet kartı (paylaşılabilir görsel) | `/card.svg` 800x418 sosyal medya kartı döner (kişisel vs resmi + fark + top-3 kategori); veri eksikliğinde 500 vermez, Türkçe ipucu kartı döner | **verified** (canlı screenshot: %23.05 vs %31.75 + top kategoriler + v0.3.0, 2026-08-19) |
-| M2.3 | Harcama geçmişi grafiği | `/history.svg` son 12 ayın aylık toplamlarını çubuk grafikle döner; sıfır ek bağımlılık; veri yokken Türkçe ipucu, asla 500; ana sayfaya gömülü | **tested** (PR #12, v0.4.0, 2026-08-19; canlı doğrulama bekliyor) |
+| M2.3 | Harcama geçmişi grafiği | `/history.svg` son 12 ayın aylık toplamlarını çubuk grafikle döner; sıfır ek bağımlılık; veri yokken Türkçe ipucu, asla 500; ana sayfaya gömülü | **verified** (Actions canlı kanıtı `artifacts/live-history-verify.txt`, 2026-08-19) |
 
-### M3 — Bağımlılık döngüsü (taslak)
+### M3 — Bağımlılık döngüsü
 
-- TÜİK açıklama günü bildirimi ("resmi %X çıktı, seninki %Y")
-- Veri dışa aktarma (CSV/Parquet) — veri kilidi dürüstlüğü
+| # | İş | Kabul kriteri | Durum |
+|---|---|---|---|
+| M3.1 | Veri dışa aktarma (CSV) — veri kilidi dürüstlüğü | `/export.csv` tüm harcamaları kategori adıyla tarih sırasında indirir; UTF-8 BOM (Excel-TR), RFC 4180 CRLF, `Content-Disposition: attachment`, CSV injection savunması; boş DB/hata durumunda header-only, asla 500 | **tested** (PR #13, v0.5.0, 2026-08-19; canlı doğrulama bekliyor) |
+| M3.2 | TÜİK açıklama günü bildirimi ("resmi %X çıktı, seninki %Y") | açıklama günü tespit + bildirim kanalı; tasarım kararı bekliyor | planned |
+| M3.3 | Parquet dışa aktarma | bilinçli ertelendi — karar kaydına bakınız | deferred |
 
 ## Karar kaydı
 
@@ -71,3 +74,5 @@ enflasyon sayısını göstermiş durumda; deploy canlı; CI yeşil.
 | 2026-08-19 | **CI kendi kendini raporlar:** Actions loglarına sandbox'tan erişim yok → ci.yml'a fail anında `pip check + ruff + alembic + pytest` özetini PR'a yorum yazan debug adımı eklendi (`permissions: pull-requests: write` gerekti). İlk kullanımında kök nedeni buldu: ruff F541 (card.py başlıkta placeholder'sız f-string) — testlerin 58/58 geçtiği, tek sorunun lint olduğu bu yorumdan anlaşıldı | Log erişimi olmayan ortamda CI kör kutuydu; teşhis aracın yoksa teşhisi boru hattına göm. Kalıcı altyapı kazanımı |
 | 2026-08-19 | **M2.2 verified:** Umut canlı `/card.svg`'yi tarayıcıda açtı (ekran görüntüsü): başlık "Enflasyonumdan ne haber?", kişisel **%23.05** vs resmi **%31.75**, fark -8.70 puan, pencere 2025-07 → 2026-07, sepet 2026-08, kozmetik %91.68 pay (enflasyonu %21.74) + gıda %8.32 pay (enflasyonu %37.53), footer `enflasyonum v0.3.0`. Yıldız yok = tam kategori eşleşmesi; Render auto-deploy sorunsuz | `verified` = gerçek kullanıcı + gerçek veri + gerçek ortam. Kategori payları ve alt enflasyonlar kartta doğru render edildi — M2.2 tamamen kapandı |
 | 2026-08-19 | **M2.3 (PR #12):** harcama geçmişi grafiği `/history.svg` — aylık toplama SQL yerine Python tarafında: testler SQLite'ta, üretim PG'de koşuyor ve ay bazlı SQL (date_trunc/strftime) iki motorda farklı; kişisel ölçekte satır sayısı küçük, Decimal korunur (para asla float). SVG kartla aynı saf-string desen, 800x360, son 12 ay `MAX_MONTHS` sabitiyle sınırlı. Aynı PR'da M2.2 QA borcu kapandı: 5 kart sözleşme testi eklendi. v0.4.0 | Taşınabirlik > SQL zarafeti bu ölçekte; toplama fonksiyonu saf olunca birim testi ağsız. Sözleşme testleri boyut/escape/cache gibi kırılgan kontratları gelecek refactor'lara karşı kilitler |
+| 2026-08-19 | **verify-live Actions deseni kalıcılaştı (`.github/workflows/verify-live.yml`):** kendi dosyasına push + workflow_dispatch tetikleyicili workflow, canlı URL'yi `curl --retry 6 --retry-delay 20` ile yoklar (Render cold start), sonucu `artifacts/live-history-verify.txt` içine `SONUC: PASS|FAIL` bloğuyla yazar ve `[skip ci]` bot commit'i olarak main'e işler. M2.3 bu desenle `verified` oldu (bot commit `d0f074c`) | Sandbox'tan dış ağa çıkış yok, Umut'un lokal ortamı yok → canlı doğrulama kanıtı ancak Actions üzerinden repo içine akar; desen tekrarlanabilir, sonraki uçlar için probu genişletmek yeter |
+| 2026-08-19 | **M3.1 (PR #13, v0.5.0):** dışa aktarma formatı CSV, Parquet bilinçli ertelendi (M3.3 `deferred`): pyarrow bağımlılığı Render free-tier build disiplinine aykırı, CSV her araçta açılır. Saf fonksiyon `expenses_to_csv` BOM'suz taşınabilir CSV üretir; UTF-8 BOM (Excel-TR uyumu) HTTP teslim katmanında (route) eklenir — taşıma katmanı sorumluluğu. QA (DenetiQA) ilk turda FAIL verdi: CSV injection açığı → `=`,`+`,`-`,`@`,TAB,CR önekli kullanıcı metinleri `'` ile nötralize edildi (OWASP); pyproject sürüm eşitlemesi ve ROADMAP güncellemesi aynı PR'a alındı. 14 export testi | Veri kilidi dürüstlüğü ürün ilkesi: kullanıcı verisini rehin tutmayız. Injection savunması saf fonksiyonda: her çağrı yolu (gelecekteki CLI/cron dahil) otomatik korunur; yalnız serbest metin kolonları defuse edilir ki sayısal kolonlar bozulmasın |

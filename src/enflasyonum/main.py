@@ -5,9 +5,11 @@ M1.6 kapsamı: kıyas bloğu — "senin %Y vs resmi %X" tek ekranda.
 M2.1 kapsamı: kategori satırlarında ECOICOP alt endeks enflasyonu.
 M2.2 kapsamı: /card.svg — paylaşılabilir aylık özet kartı.
 M2.3 kapsamı: /history.svg — aylık harcama geçmişi grafiği.
+M3.1 kapsamı: /export.csv — harcamaların CSV dökümü (veri sahipliği).
 GET /  -> form, kıyas bloğu, son harcamalar, bu ayın toplamı
 GET /card.svg -> kıyası tek görselde sunan SVG kart
 GET /history.svg -> takvim bazında son 12 ayın aylık toplamları (çubuk grafik)
+GET /export.csv -> tüm harcamaların CSV dökümü (UTF-8 BOM'lu, indirme)
 POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
 """
 
@@ -25,6 +27,7 @@ from sqlalchemy.orm import Session
 from enflasyonum import __version__, crud
 from enflasyonum.card import render_card_svg
 from enflasyonum.db import create_session_factory
+from enflasyonum.export import expenses_to_csv
 from enflasyonum.history import (
     monthly_totals,
     render_history_error_svg,
@@ -229,6 +232,37 @@ def history(session: Session = Depends(get_session)) -> Response:
         content=svg,
         media_type="image/svg+xml",
         headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/export.csv")
+def export_csv(session: Session = Depends(get_session)) -> Response:
+    """Harcamaların CSV dökümü (M3.1) — veri sahipliği.
+
+    Tüm harcamaları kategori adıyla birleştirip tarih sırasında CSV
+    olarak indirir. UTF-8 BOM: Excel'in Türkçe karakterleri doğru
+    açması için. Boş DB'de yalnız başlık satırı, beklenmeyen hatada da
+    başlık satırı döner — asla 500 vermez. Cache kapalı.
+    """
+    try:
+        rows = session.execute(
+            select(
+                Expense.spent_at, Category.name, Expense.description, Expense.amount
+            )
+            .join(Category, Expense.category_id == Category.id)
+            .order_by(Expense.spent_at, Expense.id)
+        ).all()
+        body = "\ufeff" + expenses_to_csv(rows)
+    except Exception:
+        logger.exception("export.csv üretilemedi; başlık satırı dönülüyor")
+        body = "\ufeff" + expenses_to_csv([])
+    return Response(
+        content=body,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="enflasyonum-harcamalar.csv"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
