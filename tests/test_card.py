@@ -114,6 +114,61 @@ def test_render_card_hint_when_no_data():
 
 
 # ---------------------------------------------------------------------------
+# Sözleşme testleri (M2.2 QA notu): boyut, escape, cache, top-3, yıldız
+# ---------------------------------------------------------------------------
+
+
+def test_render_card_size_and_viewbox():
+    """Kart boyutu sosyal medya oranına kilitli — sözleşme."""
+    svg = render_card_svg(_sample_comparison(), None, "0.4.0")
+    root = minidom.parseString(svg).documentElement
+    assert root.getAttribute("width") == "800"
+    assert root.getAttribute("height") == "418"
+    assert root.getAttribute("viewBox") == "0 0 800 418"
+
+
+def test_render_card_escapes_hint():
+    """İpucu metni de kullanıcıya dönen XML'in parçası — escape şart."""
+    svg = render_card_svg(None, 'veri yok <script>&"', "0.4.0")
+    minidom.parseString(svg)
+    assert "<script>" not in svg
+    assert "&lt;script&gt;&amp;" in svg
+
+
+def test_card_endpoint_fallback_sets_no_store(client):
+    """Veri yokken de cache kapalı olmalı — bayat ipucu kartı kalmasın."""
+    r = client.get("/card.svg")
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_render_card_limits_to_top_three_categories():
+    """Kartta en büyük 3 kategori görünür; fazlası taşmaz."""
+    comp = _sample_comparison()
+    comp["weight_rows"] = comp["weight_rows"] + [
+        {
+            "category": f"kategori{i}",
+            "amount": Decimal("10.00"),
+            "share_pct": Decimal("1.00"),
+            "relative_pct": Decimal("31.75"),
+            "own_series": False,
+        }
+        for i in (3, 4)
+    ]
+    svg = render_card_svg(comp, None, "0.4.0")
+    assert "kategori3" in svg
+    assert "kategori4" not in svg
+
+
+def test_render_card_own_series_row_has_no_star():
+    """Kendi alt endeksi olan kategori yıldızsız — manşete düşen yıldızlı."""
+    svg = render_card_svg(_sample_comparison(), None, "0.4.0")
+    assert "enflasyonu %50.00*" not in svg
+    assert "enflasyonu %50.00" in svg
+    assert "enflasyonu %31.75*" in svg
+
+
+# ---------------------------------------------------------------------------
 # Endpoint: /card.svg
 # ---------------------------------------------------------------------------
 

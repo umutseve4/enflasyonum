@@ -4,8 +4,10 @@ M1.3 kapsamı: /health + tek sayfalık harcama giriş formu.
 M1.6 kapsamı: kıyas bloğu — "senin %Y vs resmi %X" tek ekranda.
 M2.1 kapsamı: kategori satırlarında ECOICOP alt endeks enflasyonu.
 M2.2 kapsamı: /card.svg — paylaşılabilir aylık özet kartı.
+M2.3 kapsamı: /history.svg — aylık harcama geçmişi grafiği.
 GET /  -> form, kıyas bloğu, son harcamalar, bu ayın toplamı
 GET /card.svg -> kıyası tek görselde sunan SVG kart
+GET /history.svg -> son 12 ayın aylık toplamları (çubuk grafik)
 POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
 """
 
@@ -22,6 +24,7 @@ from sqlalchemy.orm import Session
 from enflasyonum import __version__, crud
 from enflasyonum.card import render_card_svg
 from enflasyonum.db import create_session_factory
+from enflasyonum.history import monthly_totals, render_history_svg
 from enflasyonum.models import Category, Expense, OfficialCPI
 from enflasyonum.personal_index import (
     PersonalIndexError,
@@ -193,6 +196,24 @@ def card(session: Session = Depends(get_session)) -> Response:
     """
     ctx = _comparison_context(session)
     svg = render_card_svg(ctx["comparison"], ctx["comparison_hint"], __version__)
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/history.svg")
+def history(session: Session = Depends(get_session)) -> Response:
+    """Aylık harcama geçmişi grafiği (M2.3).
+
+    Tüm harcamaları çekip Python tarafında ay bazında toplar (gerekçe:
+    history.py modül docstring'i). Veri yokken Türkçe ipucu döner —
+    asla 500 vermez. Cache kapalı: grafik her istekte güncel veriden
+    üretilir.
+    """
+    rows = session.execute(select(Expense.spent_at, Expense.amount)).all()
+    svg = render_history_svg(monthly_totals(rows), __version__)
     return Response(
         content=svg,
         media_type="image/svg+xml",

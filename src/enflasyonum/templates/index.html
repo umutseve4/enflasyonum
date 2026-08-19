@@ -23,6 +23,7 @@
     .card .label { font-size: .85rem; opacity: .7; }
     .card .big { font-size: 1.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
     .meta { font-size: .8rem; opacity: .7; }
+    .history img { width: 100%; height: auto; border-radius: .5rem; }
     details { margin-top: .6rem; }
     details summary { cursor: pointer; font-size: .9rem; }
     footer { margin-top: 2rem; font-size: .8rem; opacity: .6; }
@@ -109,6 +110,12 @@
       {% endfor %}
     </tbody>
   </table>
+
+  <section class="compare history">
+    <h2>Harcama geçmişi</h2>
+    <img src="/history.svg" alt="Aylık harcama geçmişi grafiği">
+    <p class="meta"><a href="/history.svg" target="_blank">📊 Grafiği yeni sekmede aç</a></p>
+  </section>
 
   <footer>enflasyonum v{{ version }}</footer>
 </body>
