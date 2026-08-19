@@ -1,7 +1,7 @@
-verify-live koşusu: 2026-08-19T16:37:57Z
+verify-live koşusu: 2026-08-19T16:46:56Z
 
 == /health -> HTTP 200, 33 bytes ==
-{"status":"ok","version":"0.4.0"}
+{"status":"ok","version":"0.5.0"}
 
 == /history.svg -> HTTP 200, 803 bytes ==
 SVG kök etiketi bulundu: PASS
@@ -19,9 +19,9 @@ SVG kök etiketi bulundu: PASS
   <text x="40" y="130" fill="#9aa0a6" font-family="system-ui, sans-serif" font-size="20">Senin enflasyonun</text>
   <text x="40" y="196" fill="#f28b82" font-fam
 
-== /export.csv -> HTTP 404, 22 bytes ==
-hexhead=7b2264 content_type_ok=0 header_ok=0
-CSV doğrulaması: FAIL
+== /export.csv -> HTTP 200, 179 bytes ==
+hexhead=efbbbf content_type_ok=1 header_ok=1
+CSV doğrulaması (BOM + tam başlık + content-type): PASS
 
 ===== OTOMATIK KONTROL =====
-SONUC: FAIL
+SONUC: PASS
