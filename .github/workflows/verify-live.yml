@@ -1,0 +1,58 @@
+name: verify-live
+
+# Canlı doğrulama deseni: bu dosya push edilince koşar, canlı URL'yi yoklar,
+# kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
+on:
+  push:
+    paths:
+      - ".github/workflows/verify-live.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Canlı uçları yokla (Render free uykudan uyanabilir, retry'lı)
+        run: |
+          set -u
+          mkdir -p artifacts
+          OUT=artifacts/live-history-verify.txt
+          BASE="https://enflasyonum-7gcn.onrender.com"
+          echo "verify-live koşusu: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
+          FAIL=0
+          for P in /health /history.svg /card.svg; do
+            CODE=$(curl -s -o /tmp/resp -w "%{http_code}" --max-time 180 \
+                   --retry 6 --retry-delay 20 --retry-all-errors "$BASE$P" || echo "000")
+            SIZE=$(wc -c < /tmp/resp | tr -d ' ')
+            echo "" >> "$OUT"
+            echo "== $P -> HTTP $CODE, $SIZE bytes ==" >> "$OUT"
+            if [ "$P" = "/history.svg" ] || [ "$P" = "/card.svg" ]; then
+              if [ "$CODE" = "200" ] && grep -q "<svg" /tmp/resp; then
+                echo "SVG kök etiketi bulundu: PASS" >> "$OUT"
+              else
+                echo "SVG doğrulaması: FAIL" >> "$OUT"; FAIL=1
+              fi
+              head -c 500 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
+            else
+              [ "$CODE" = "200" ] || FAIL=1
+              head -c 200 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
+            fi
+          done
+          echo "" >> "$OUT"
+          echo "===== OTOMATIK KONTROL =====" >> "$OUT"
+          if [ "$FAIL" = "0" ]; then echo "SONUC: PASS" >> "$OUT"; else echo "SONUC: FAIL" >> "$OUT"; fi
+          cat "$OUT"
+
+      - name: Kanıtı commit'le
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/live-history-verify.txt
+          git commit -m "chore: canlı /history.svg doğrulama kanıtı [skip ci]" || echo "değişiklik yok"
+          git pull --rebase origin main
+          git push origin main
