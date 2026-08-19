@@ -9,6 +9,10 @@ koşar; ay bazlı SQL toplaması (date_trunc / strftime) iki motorda
 farklı yazılır. Kişisel kullanım ölçeğinde satır sayısı küçük olduğu
 için satırları çekip Python'da (yıl, ay) anahtarıyla toplamak hem
 taşınabilir hem birim-testli. Para daima Decimal — asla float.
+
+"Son 12 ay" tanımı: en son harcamanın ayından geriye TAKVİM bazında
+12 aylık pencere. Pencere içindeki boş aylar 0 toplamla gösterilir ki
+grafik zaman eksenini yanıltmasın (QA bulgusu, PR #12).
 """
 
 from datetime import date
@@ -19,7 +23,7 @@ from xml.sax.saxutils import escape
 WIDTH = 800
 HEIGHT = 360
 
-#: Gösterilecek en fazla ay sayısı (son 12 ay).
+#: Gösterilecek en fazla ay sayısı (takvim bazında son 12 ay).
 MAX_MONTHS = 12
 
 _MARGIN = 40
@@ -30,14 +34,34 @@ _CHART_BOTTOM = HEIGHT - 64
 def monthly_totals(rows: list[tuple[date, Decimal]]) -> list[tuple[date, Decimal]]:
     """(spent_at, amount) satırlarını ay bazında topla.
 
-    Dönüş: dönem sırasına göre ``[(ayın ilk günü, toplam)]`` — en fazla
-    son ``MAX_MONTHS`` ay.
+    Dönüş: dönem sırasına göre ``[(ayın ilk günü, toplam)]``. Pencere,
+    en son harcamanın ayından geriye takvim bazında ``MAX_MONTHS`` aydır;
+    pencereden eski kayıtlar düşer, veri içeren ilk aydan itibaren
+    boş aylar ``Decimal("0")`` ile doldurulur.
     """
     acc: dict[date, Decimal] = {}
     for spent_at, amount in rows:
         key = date(spent_at.year, spent_at.month, 1)
         acc[key] = acc.get(key, Decimal("0")) + Decimal(amount)
-    return sorted(acc.items())[-MAX_MONTHS:]
+    if not acc:
+        return []
+
+    last = max(acc)
+    window: list[date] = []
+    year, month = last.year, last.month
+    for _ in range(MAX_MONTHS):
+        window.append(date(year, month, 1))
+        month -= 1
+        if month == 0:
+            year, month = year - 1, 12
+    window.reverse()
+
+    first_with_data = min(key for key in acc if key >= window[0])
+    return [
+        (period, acc.get(period, Decimal("0")))
+        for period in window
+        if period >= first_with_data
+    ]
 
 
 def _svg_open() -> str:
@@ -49,6 +73,41 @@ def _svg_open() -> str:
     )
 
 
+def _title() -> str:
+    return (
+        '  <text x="40" y="56" fill="#8ab4f8" font-family="system-ui, sans-serif" '
+        'font-size="24" font-weight="700">Harcama geçmişi</text>\n'
+    )
+
+
+def _footer(version: str) -> str:
+    return (
+        f'  <text x="40" y="{HEIGHT - 20}" fill="#5f6368" '
+        f'font-family="system-ui, sans-serif" font-size="14">'
+        f"enflasyonum v{escape(version)}</text>\n"
+    )
+
+
+def _hint(message: str) -> str:
+    return (
+        '  <text x="40" y="190" fill="#e8eaed" font-family="system-ui, sans-serif" '
+        f'font-size="22">{escape(message)}</text>\n'
+    )
+
+
+def render_history_error_svg(version: str) -> str:
+    """DB/render hatasında dönen ipucu kartı — "asla 500 verme" sözleşmesi.
+
+    Endpoint beklenmeyen bir hata yakalarsa kullanıcıya 500 yerine bu
+    kart 200 ile döner; hata detayı loglanır, görsele sızmaz.
+    """
+    parts = [_svg_open(), _title()]
+    parts.append(_hint("Grafik şu anda oluşturulamadı — daha sonra tekrar dene."))
+    parts.append(_footer(version))
+    parts.append("</svg>\n")
+    return "".join(parts)
+
+
 def render_history_svg(totals: list[tuple[date, Decimal]], version: str) -> str:
     """Aylık toplamlardan çubuk grafik SVG üret.
 
@@ -56,17 +115,10 @@ def render_history_svg(totals: list[tuple[date, Decimal]], version: str) -> str:
     500 vermez (kart ve ana sayfayla aynı ilke). Metinler XML'e karşı
     escape edilir.
     """
-    parts = [_svg_open()]
-    parts.append(
-        '  <text x="40" y="56" fill="#8ab4f8" font-family="system-ui, sans-serif" '
-        'font-size="24" font-weight="700">Harcama geçmişi</text>\n'
-    )
+    parts = [_svg_open(), _title()]
 
     if not totals:
-        parts.append(
-            '  <text x="40" y="190" fill="#e8eaed" font-family="system-ui, sans-serif" '
-            'font-size="22">Henüz harcama yok — grafik ilk kayıtla birlikte oluşur.</text>\n'
-        )
+        parts.append(_hint("Henüz harcama yok — grafik ilk kayıtla birlikte oluşur."))
     else:
         max_total = max(total for _, total in totals)
         chart_w = WIDTH - 2 * _MARGIN
@@ -94,10 +146,6 @@ def render_history_svg(totals: list[tuple[date, Decimal]], version: str) -> str:
                 f"{escape(period.strftime('%Y-%m'))}</text>\n"
             )
 
-    parts.append(
-        f'  <text x="40" y="{HEIGHT - 20}" fill="#5f6368" '
-        f'font-family="system-ui, sans-serif" font-size="14">'
-        f"enflasyonum v{escape(version)}</text>\n"
-    )
+    parts.append(_footer(version))
     parts.append("</svg>\n")
     return "".join(parts)
