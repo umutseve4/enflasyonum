@@ -2,6 +2,8 @@ name: verify-live
 
 # Canlı doğrulama deseni: bu dosya push edilince koşar, canlı URL'yi yoklar,
 # kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
+# NOT: /export.csv kişisel harcama verisi içerebilir — gövdesi ASLA kanıt
+# dosyasına yazılmaz; yalnız güvenli metadata (kod, boyut, hexhead, boolean'lar).
 on:
   push:
     paths:
@@ -25,8 +27,8 @@ jobs:
           BASE="https://enflasyonum-7gcn.onrender.com"
           echo "verify-live koşusu: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
           FAIL=0
-          for P in /health /history.svg /card.svg; do
-            CODE=$(curl -s -o /tmp/resp -w "%{http_code}" --max-time 180 \
+          for P in /health /history.svg /card.svg /export.csv; do
+            CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" --max-time 180 \
                    --retry 6 --retry-delay 20 --retry-all-errors "$BASE$P" || echo "000")
             SIZE=$(wc -c < /tmp/resp | tr -d ' ')
             echo "" >> "$OUT"
@@ -38,6 +40,18 @@ jobs:
                 echo "SVG doğrulaması: FAIL" >> "$OUT"; FAIL=1
               fi
               head -c 500 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
+            elif [ "$P" = "/export.csv" ]; then
+              HEXHEAD=$(head -c 3 /tmp/resp | od -An -tx1 | tr -d ' \n')
+              # İlk satır: BOM atlanıp CR kırpılarak tam eşleşme (gövde loglanmaz)
+              FIRSTLINE=$(head -c 60 /tmp/resp | tail -c +4 | head -n 1 | tr -d '\r')
+              CT_OK=0; grep -qi "^content-type: *text/csv" /tmp/hdr && CT_OK=1
+              HDR_OK=0; [ "$FIRSTLINE" = "tarih,kategori,aciklama,tutar" ] && HDR_OK=1
+              echo "hexhead=$HEXHEAD content_type_ok=$CT_OK header_ok=$HDR_OK" >> "$OUT"
+              if [ "$CODE" = "200" ] && [ "$HEXHEAD" = "efbbbf" ] && [ "$CT_OK" = "1" ] && [ "$HDR_OK" = "1" ]; then
+                echo "CSV doğrulaması (BOM + tam başlık + content-type): PASS" >> "$OUT"
+              else
+                echo "CSV doğrulaması: FAIL" >> "$OUT"; FAIL=1
+              fi
             else
               [ "$CODE" = "200" ] || FAIL=1
               head -c 200 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
@@ -53,6 +67,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/live-history-verify.txt
-          git commit -m "chore: canlı /history.svg doğrulama kanıtı [skip ci]" || echo "değişiklik yok"
+          git commit -m "chore: canlı doğrulama kanıtı (history+card+export) [skip ci]" || echo "değişiklik yok"
           git pull --rebase origin main
           git push origin main
