@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -44,3 +48,22 @@ jobs:
           alembic downgrade base
       - name: Test
         run: pytest
+      - name: Debug report (on failure)
+        if: failure() && matrix.python-version == '3.12' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### CI hata raporu (python ${{ matrix.python-version }})"
+            echo '```'
+            echo "--- pip check ---"
+            pip check 2>&1 | head -20 || true
+            echo "--- ruff ---"
+            ruff check src tests migrations 2>&1 | head -80 || true
+            echo "--- alembic upgrade head ---"
+            alembic upgrade head 2>&1 | tail -30 || true
+            echo "--- pytest ---"
+            pytest -x -q 2>&1 | tail -80 || true
+            echo '```'
+          } > report.md
+          gh pr comment ${{ github.event.pull_request.number }} --body-file report.md
