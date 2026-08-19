@@ -4,11 +4,14 @@ M1.3 kapsamı: /health + tek sayfalık harcama giriş formu.
 M1.6 kapsamı: kıyas bloğu — "senin %Y vs resmi %X" tek ekranda.
 M2.1 kapsamı: kategori satırlarında ECOICOP alt endeks enflasyonu.
 M2.2 kapsamı: /card.svg — paylaşılabilir aylık özet kartı.
+M2.3 kapsamı: /history.svg — aylık harcama geçmişi grafiği.
 GET /  -> form, kıyas bloğu, son harcamalar, bu ayın toplamı
 GET /card.svg -> kıyası tek görselde sunan SVG kart
+GET /history.svg -> takvim bazında son 12 ayın aylık toplamları (çubuk grafik)
 POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
 """
 
+import logging
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -22,6 +25,11 @@ from sqlalchemy.orm import Session
 from enflasyonum import __version__, crud
 from enflasyonum.card import render_card_svg
 from enflasyonum.db import create_session_factory
+from enflasyonum.history import (
+    monthly_totals,
+    render_history_error_svg,
+    render_history_svg,
+)
 from enflasyonum.models import Category, Expense, OfficialCPI
 from enflasyonum.personal_index import (
     PersonalIndexError,
@@ -31,6 +39,8 @@ from enflasyonum.personal_index import (
     headline_relative,
 )
 from enflasyonum.series import HEADLINE_SERIES
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Enflasyonumdan ne haber?",
@@ -193,6 +203,28 @@ def card(session: Session = Depends(get_session)) -> Response:
     """
     ctx = _comparison_context(session)
     svg = render_card_svg(ctx["comparison"], ctx["comparison_hint"], __version__)
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/history.svg")
+def history(session: Session = Depends(get_session)) -> Response:
+    """Aylık harcama geçmişi grafiği (M2.3).
+
+    Tüm harcamaları çekip Python tarafında takvim ayı bazında toplar
+    (gerekçe: history.py modül docstring'i). Veri yokken Türkçe ipucu,
+    beklenmeyen hatada (örn. DB erişilemez) hata kartı döner — asla
+    500 vermez. Cache kapalı: grafik her istekte güncel veriden üretilir.
+    """
+    try:
+        rows = session.execute(select(Expense.spent_at, Expense.amount)).all()
+        svg = render_history_svg(monthly_totals(rows), __version__)
+    except Exception:
+        logger.exception("history.svg üretilemedi; hata kartı dönülüyor")
+        svg = render_history_error_svg(__version__)
     return Response(
         content=svg,
         media_type="image/svg+xml",
