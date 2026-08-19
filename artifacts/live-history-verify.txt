@@ -1,4 +1,4 @@
-verify-live koşusu: 2026-08-19T15:58:42Z
+verify-live koşusu: 2026-08-19T16:37:57Z
 
 == /health -> HTTP 200, 33 bytes ==
 {"status":"ok","version":"0.4.0"}
@@ -19,5 +19,9 @@ SVG kök etiketi bulundu: PASS
   <text x="40" y="130" fill="#9aa0a6" font-family="system-ui, sans-serif" font-size="20">Senin enflasyonun</text>
   <text x="40" y="196" fill="#f28b82" font-fam
 
+== /export.csv -> HTTP 404, 22 bytes ==
+hexhead=7b2264 content_type_ok=0 header_ok=0
+CSV doğrulaması: FAIL
+
 ===== OTOMATIK KONTROL =====
-SONUC: PASS
+SONUC: FAIL
