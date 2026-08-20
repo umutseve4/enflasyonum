@@ -5,40 +5,162 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Enflasyonumdan ne haber?</title>
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.4rem; }
-    h2 { font-size: 1.1rem; margin-bottom: .5rem; }
-    form { display: grid; gap: .5rem; grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem; }
-    form input, form button { padding: .5rem; font-size: 1rem; }
-    form .full { grid-column: 1 / -1; }
-    .error { color: #c0392b; font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: .4rem .3rem; border-bottom: 1px solid #8884; }
-    td.amount, th.amount { text-align: right; font-variant-numeric: tabular-nums; }
-    .total { margin: .8rem 0; font-weight: 700; }
-    .compare { margin: 1.5rem 0; }
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f5f7;
+      --surface: #ffffff;
+      --text: #1c1e26;
+      --muted: #5b6270;
+      --border: #e4e6eb;
+      --accent: #6d28d9;
+      --accent-soft: #ede9fe;
+      --good: #059669;
+      --bad: #dc2626;
+      --radius: 14px;
+      --shadow: 0 1px 2px rgb(0 0 0 / .05), 0 4px 16px rgb(0 0 0 / .06);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1117;
+        --surface: #181b24;
+        --text: #e7e9ee;
+        --muted: #9aa1af;
+        --border: #262a36;
+        --accent: #a78bfa;
+        --accent-soft: #2b2350;
+        --good: #34d399;
+        --bad: #f87171;
+        --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 6px 20px rgb(0 0 0 / .35);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 1.2rem 1rem 2.5rem;
+      line-height: 1.5;
+    }
+    header.hero {
+      background: linear-gradient(135deg, var(--accent) 0%, #4c1d95 100%);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 1.4rem 1.5rem;
+      margin-bottom: 1.2rem;
+      box-shadow: var(--shadow);
+    }
+    header.hero h1 { margin: 0; font-size: 1.45rem; letter-spacing: -.01em; }
+    header.hero p { margin: .3rem 0 0; font-size: .85rem; opacity: .85; }
+    section.panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.2rem;
+      margin-bottom: 1.2rem;
+      box-shadow: var(--shadow);
+    }
+    h2 { font-size: 1.02rem; margin: 0 0 .8rem; letter-spacing: -.01em; }
+    .error {
+      color: var(--bad);
+      font-weight: 600;
+      background: color-mix(in srgb, var(--bad) 10%, transparent);
+      border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
+      border-radius: var(--radius);
+      padding: .6rem .9rem;
+      margin-bottom: 1rem;
+    }
     .cards { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
-    .card { border: 1px solid #8884; border-radius: .5rem; padding: .8rem; text-align: center; }
-    .card .label { font-size: .85rem; opacity: .7; }
-    .card .big { font-size: 1.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-    .meta { font-size: .8rem; opacity: .7; }
-    .history img { width: 100%; height: auto; border-radius: .5rem; }
-    details { margin-top: .6rem; }
-    details summary { cursor: pointer; font-size: .9rem; }
-    footer { margin-top: 2rem; font-size: .8rem; opacity: .6; }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .9rem .6rem;
+      text-align: center;
+      background: var(--bg);
+    }
+    .card.mine { background: var(--accent-soft); border-color: transparent; }
+    .card .label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .card .big {
+      font-size: 2rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.02em;
+      margin-top: .15rem;
+    }
+    .card.mine .big { color: var(--accent); }
+    .meta { font-size: .8rem; color: var(--muted); margin: .8rem 0 0; }
+    details { margin-top: .8rem; }
+    details summary {
+      cursor: pointer;
+      font-size: .88rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    details[open] summary { margin-bottom: .6rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    th {
+      text-align: left;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      padding: .45rem .4rem;
+      border-bottom: 2px solid var(--border);
+    }
+    td { text-align: left; padding: .5rem .4rem; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    td.amount, th.amount { text-align: right; font-variant-numeric: tabular-nums; }
+    form { display: grid; gap: .6rem; grid-template-columns: 1fr 1fr; }
+    form input {
+      padding: .65rem .8rem;
+      font-size: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    form input:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      border-color: transparent;
+    }
+    form button {
+      padding: .7rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: filter .15s ease;
+    }
+    form button:hover { filter: brightness(1.1); }
+    form .full { grid-column: 1 / -1; }
+    .total {
+      margin: 1rem 0 .6rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .history img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--border); }
+    a { color: var(--accent); }
+    footer { margin-top: 1.5rem; font-size: .78rem; color: var(--muted); text-align: center; }
   </style>
 </head>
 <body>
-  <h1>Enflasyonumdan ne haber?</h1>
+  <header class="hero">
+    <h1>Enflasyonumdan ne haber?</h1>
+    <p>Kendi harcamalarınla hesaplanan kişisel enflasyon endeksin</p>
+  </header>
 
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
-  <section class="compare">
+  <section class="panel compare">
     <h2>Yıllık enflasyon kıyası</h2>
     {% if comparison %}
     <div class="cards">
-      <div class="card">
+      <div class="card mine">
         <div class="label">Senin enflasyonun</div>
         <div class="big">%{{ comparison.personal_pct }}</div>
       </div>
@@ -83,35 +205,38 @@
     {% endif %}
   </section>
 
-  <form method="post" action="/expenses">
-    <input class="full" name="description" placeholder="Açıklama (örn. süt)" required>
-    <input name="amount" inputmode="decimal" placeholder="Tutar (örn. 42,50)" required>
-    <input name="category" placeholder="Kategori (örn. gıda)" required>
-    <input name="spent_at" type="date" value="{{ today.isoformat() }}" required>
-    <button class="full" type="submit">Kaydet</button>
-  </form>
+  <section class="panel">
+    <h2>Harcama ekle</h2>
+    <form method="post" action="/expenses">
+      <input class="full" name="description" aria-label="Açıklama" placeholder="Açıklama (örn. süt)" required>
+      <input name="amount" inputmode="decimal" aria-label="Tutar" placeholder="Tutar (örn. 42,50)" required>
+      <input name="category" aria-label="Kategori" placeholder="Kategori (örn. gıda)" required>
+      <input name="spent_at" type="date" aria-label="Tarih" value="{{ today.isoformat() }}" required>
+      <button class="full" type="submit">Kaydet</button>
+    </form>
 
-  <p class="total">Bu ayın toplamı: {{ monthly_total }} TL</p>
+    <p class="total">Bu ayın toplamı: {{ monthly_total }} TL</p>
 
-  <table>
-    <thead>
-      <tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th class="amount">Tutar</th></tr>
-    </thead>
-    <tbody>
-      {% for e in expenses %}
-      <tr>
-        <td>{{ e.spent_at.isoformat() }}</td>
-        <td>{{ e.category }}</td>
-        <td>{{ e.description }}</td>
-        <td class="amount">{{ e.amount }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4">Henüz harcama yok — ilk kaydı yukarıdan gir.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+    <table>
+      <thead>
+        <tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th class="amount">Tutar</th></tr>
+      </thead>
+      <tbody>
+        {% for e in expenses %}
+        <tr>
+          <td>{{ e.spent_at.isoformat() }}</td>
+          <td>{{ e.category }}</td>
+          <td>{{ e.description }}</td>
+          <td class="amount">{{ e.amount }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">Henüz harcama yok — ilk kaydı yukarıdan gir.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
 
-  <section class="compare history">
+  <section class="panel compare history">
     <h2>Harcama geçmişi</h2>
     <img src="/history.svg" alt="Aylık harcama geçmişi grafiği">
     <p class="meta"><a href="/history.svg" target="_blank">📊 Grafiği yeni sekmede aç</a></p>
