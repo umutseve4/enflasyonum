@@ -10,7 +10,7 @@
       --bg: #f4f5f7;
       --surface: #ffffff;
       --text: #1c1e26;
-      --muted: #6b7280;
+      --muted: #5b6270;
       --border: #e4e6eb;
       --accent: #6d28d9;
       --accent-soft: #ede9fe;
@@ -208,10 +208,10 @@
   <section class="panel">
     <h2>Harcama ekle</h2>
     <form method="post" action="/expenses">
-      <input class="full" name="description" placeholder="Açıklama (örn. süt)" required>
-      <input name="amount" inputmode="decimal" placeholder="Tutar (örn. 42,50)" required>
-      <input name="category" placeholder="Kategori (örn. gıda)" required>
-      <input name="spent_at" type="date" value="{{ today.isoformat() }}" required>
+      <input class="full" name="description" aria-label="Açıklama" placeholder="Açıklama (örn. süt)" required>
+      <input name="amount" inputmode="decimal" aria-label="Tutar" placeholder="Tutar (örn. 42,50)" required>
+      <input name="category" aria-label="Kategori" placeholder="Kategori (örn. gıda)" required>
+      <input name="spent_at" type="date" aria-label="Tarih" value="{{ today.isoformat() }}" required>
       <button class="full" type="submit">Kaydet</button>
     </form>
 
