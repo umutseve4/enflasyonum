@@ -6,9 +6,13 @@ endekslerle (TÜİK TÜFE) kıyaslamanı sağlar.
 
 > Repo slug'ı `enflasyonum` (kısa, URL/import dostu); uygulama adı
 > **"Enflasyonumdan ne haber?"**
->
-> Durum: 🚧 M1 (dikey dilim) geliştirme aşamasında — henüz çalışan sürüm yok.
-> Güncel durum için [ROADMAP.md](ROADMAP.md).
+
+## Canlı demo
+
+🔗 **Demo:** https://enflasyonum-7gcn.onrender.com — [/health](https://enflasyonum-7gcn.onrender.com/health) · [/card.svg](https://enflasyonum-7gcn.onrender.com/card.svg) · [/history.svg](https://enflasyonum-7gcn.onrender.com/history.svg) · [/export.csv](https://enflasyonum-7gcn.onrender.com/export.csv)
+
+> Not: Render free tier 15 dk hareketsizlikte uyur; ilk istek ~30-60 sn sürebilir.
+> Canlı servis her hafta [verify-live](.github/workflows/verify-live.yml) workflow'u ile otomatik doğrulanır.
 
 ## Problem
 
@@ -16,14 +20,20 @@ Resmi enflasyon bir ortalama sepetin ölçümüdür; kimsenin sepeti ortalama de
 Kişisel sepet ağırlıklarıyla hesaplanan bireysel endeks, "benim enflasyonum kaç?"
 sorusuna doğrulanabilir bir cevap verir.
 
-## Kapsam (M1 dikey dilim)
+## Özellikler (canlıda)
 
-- Harcama girişi: tutar + kategori + tarih (web form)
-- Aylık kişisel endeks: kişisel sepet ağırlıklı fiyat değişimi (Laspeyres yaklaşımı)
-- TÜİK TÜFE ile kıyas: tek ekran, tek sayı — "senin enflasyonun %Y, resmi %X"
-
-Kapsam DIŞI (şimdilik): OCR/fiş okuma, mobil uygulama mağazası, çoklu kullanıcı
-yönetim paneli, tahmin/ML.
+- **Harcama girişi:** tutar + kategori + tarih (web form)
+- **Kişisel endeks:** kişisel sepet ağırlıklı Laspeyres endeksi, **13 ECOICOP
+  alt endeksi** üzerinde ayrıştırılmış hesap
+- **TÜİK TÜFE kıyası:** tek ekran, tek sayı — "senin enflasyonun %Y, resmi %X"
+  (canlı örnek: kişisel %23.05 vs resmi %31.75)
+- **Özet kartı:** `/card.svg` — paylaşılabilir SVG özet kartı
+- **Geçmiş grafiği:** `/history.svg`
+- **CSV dışa aktarma:** `/export.csv` (CSV-injection korumalı)
+- **TÜİK açıklama günü bildirimi:** yeni TÜFE bülteni yayınlandığında GitHub
+  Actions otomatik issue açar (idempotent, `tufe-bildirim` etiketi)
+- **Otomatik günlük veri çekimi:** TCMB EVDS üzerinden resmi TÜFE serisi
+  (`TP.TUKFIY2025.GENEL`, 2025=100 bazlı)
 
 ## Kurulum (geliştirme)
 
@@ -37,22 +47,40 @@ uvicorn enflasyonum.main:app --reload
 Testler ve lint:
 
 ```bash
-pytest
+pytest        # 116 test
 ruff check src tests
 ```
 
-## Mimari (planlanan)
+## Mimari
 
 ```
-TÜİK/EVDS API ──▶ ingestion job ──▶ PostgreSQL ◀── kullanıcı harcama girişi (FastAPI)
-                                        │
-                                        ▼
-                              endeks hesap motoru ──▶ API ──▶ web UI
+TÜİK/EVDS API ──▶ günlük ingest (GitHub Actions) ──▶ PostgreSQL ◀── kullanıcı harcama girişi (FastAPI)
+                                                        │
+                                                        ▼
+                                     endeks hesap motoru (Laspeyres, 13 ECOICOP)
+                                                        │
+                                                        ▼
+                              API ──▶ web UI · /card.svg · /history.svg · /export.csv
 ```
+
+## Durum (dürüst)
+
+Güncel sürüm **v0.6.0** — ayrıntı için [ROADMAP.md](ROADMAP.md).
+
+| Aşama | Durum |
+|---|---|
+| M1 — Dikey dilim: giriş + endeks + TÜFE kıyası + canlı deploy | ✅ canlıda doğrulandı |
+| M2 — 13 ECOICOP alt endeksi + özet kartı + haftalık canlı doğrulama | ✅ canlıda doğrulandı |
+| M3.1 — CSV dışa aktarma | ✅ canlıda doğrulandı |
+| M3.2 — TÜİK açıklama günü bildirimi | 🧪 test edildi + merge; ilk gerçek TÜFE açıklamasında canlı doğrulanacak |
+
+Kapsam DIŞI (şimdilik): OCR/fiş okuma, mobil uygulama mağazası, çoklu kullanıcı
+yönetim paneli, tahmin/ML.
 
 ## Teknoloji
 
-Python 3.11+, FastAPI, PostgreSQL, pytest, ruff, GitHub Actions CI.
+Python 3.11+, FastAPI, PostgreSQL, pytest (116 test), ruff, GitHub Actions CI
+(test + lint + canlı smoke).
 
 ## Lisans
 
