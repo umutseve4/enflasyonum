@@ -51,7 +51,10 @@ jobs:
             echo "--- KOSU 2 (idempotency) ---"
             cat run2.txt
           } > artifacts/live-ingest.txt
-          exit 0
+          if [ "$rc1" -ne 0 ] || [ "$rc2" -ne 0 ]; then
+            echo "Canlı ingest başarısız: run1=$rc1 run2=$rc2" >&2
+            exit 1
+          fi
 
       - name: Commit result
         run: |

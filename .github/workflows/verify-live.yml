@@ -4,7 +4,6 @@ name: verify-live
 # kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
 # NOT: /export.csv kişisel harcama verisi içerebilir — gövdesi ASLA kanıt
 # dosyasına yazılmaz; yalnız güvenli metadata (kod, boyut, hexhead, boolean'lar).
-# Yeniden tetikleme: 2026-08-19 (ilk koşuda Render henüz v0.4.0'daydı, /export.csv 404)
 on:
   push:
     paths:
@@ -43,7 +42,6 @@ jobs:
               head -c 500 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
             elif [ "$P" = "/export.csv" ]; then
               HEXHEAD=$(head -c 3 /tmp/resp | od -An -tx1 | tr -d ' \n')
-              # İlk satır: BOM atlanıp CR kırpılarak tam eşleşme (gövde loglanmaz)
               FIRSTLINE=$(head -c 60 /tmp/resp | tail -c +4 | head -n 1 | tr -d '\r')
               CT_OK=0; grep -qi "^content-type: *text/csv" /tmp/hdr && CT_OK=1
               HDR_OK=0; [ "$FIRSTLINE" = "tarih,kategori,aciklama,tutar" ] && HDR_OK=1
@@ -60,8 +58,13 @@ jobs:
           done
           echo "" >> "$OUT"
           echo "===== OTOMATIK KONTROL =====" >> "$OUT"
-          if [ "$FAIL" = "0" ]; then echo "SONUC: PASS" >> "$OUT"; else echo "SONUC: FAIL" >> "$OUT"; fi
+          if [ "$FAIL" = "0" ]; then
+            echo "SONUC: PASS" >> "$OUT"
+          else
+            echo "SONUC: FAIL" >> "$OUT"
+          fi
           cat "$OUT"
+          exit "$FAIL"
 
       - name: Kanıtı commit'le
         run: |
