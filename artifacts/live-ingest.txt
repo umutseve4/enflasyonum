@@ -1,17 +1,49 @@
 # Canlı EVDS ingest doğrulaması
-tarih: 2026-08-18T16:53:48Z
+tarih: 2026-08-22T20:54:09Z
 exit codes: run1=0 run2=0
 
 --- KOSU 1 ---
 ===== OTOMATIK KONTROL =====
 islenen donem: 24
-tablodaki satir: 24
+islenen TP.TUKFIY2025.GENEL: 24
+islenen TP.TUKFIY2025.01: 24
+islenen TP.TUKFIY2025.02: 24
+islenen TP.TUKFIY2025.03: 24
+islenen TP.TUKFIY2025.04: 24
+islenen TP.TUKFIY2025.05: 24
+islenen TP.TUKFIY2025.06: 24
+islenen TP.TUKFIY2025.07: 24
+islenen TP.TUKFIY2025.08: 24
+islenen TP.TUKFIY2025.09: 24
+islenen TP.TUKFIY2025.10: 24
+islenen TP.TUKFIY2025.11: 24
+islenen TP.TUKFIY2025.12: 24
+islenen TP.TUKFIY2025.13: 24
+tablodaki satir (manset): 24
 aralik: 2024-08-01 .. 2026-07-01
 sonuc: PASS
+HEADLINE_LATEST_PERIOD=2026-07
+HEADLINE_MOM_PCT=1.78
 
 --- KOSU 2 (idempotency) ---
 ===== OTOMATIK KONTROL =====
 islenen donem: 24
-tablodaki satir: 24
+islenen TP.TUKFIY2025.GENEL: 24
+islenen TP.TUKFIY2025.01: 24
+islenen TP.TUKFIY2025.02: 24
+islenen TP.TUKFIY2025.03: 24
+islenen TP.TUKFIY2025.04: 24
+islenen TP.TUKFIY2025.05: 24
+islenen TP.TUKFIY2025.06: 24
+islenen TP.TUKFIY2025.07: 24
+islenen TP.TUKFIY2025.08: 24
+islenen TP.TUKFIY2025.09: 24
+islenen TP.TUKFIY2025.10: 24
+islenen TP.TUKFIY2025.11: 24
+islenen TP.TUKFIY2025.12: 24
+islenen TP.TUKFIY2025.13: 24
+tablodaki satir (manset): 24
 aralik: 2024-08-01 .. 2026-07-01
 sonuc: PASS
+HEADLINE_LATEST_PERIOD=2026-07
+HEADLINE_MOM_PCT=1.78
