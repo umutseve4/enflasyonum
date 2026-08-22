@@ -1,4 +1,4 @@
-# Günlük EVDS TÜFE ingest — canlı (Neon) veritabanına.
+# Günlük EVDS TÜFE ingest — canlı veritabanına.
 # Render'ın cron'u ücretli; GitHub Actions cron ücretsiz ve desen zaten kurulu.
 # Gerekli repo secret'ları: EVDS_API_KEY, LIVE_DATABASE_URL
 # M3.2: ingest çıktısındaki level-triggered marker'dan bildirim issue'su açılır
@@ -36,8 +36,8 @@ jobs:
           DATABASE_URL: ${{ secrets.LIVE_DATABASE_URL }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo 'LIVE_DATABASE_URL secret tanımlı değil — deploy tamamlanınca eklenecek.'
-            exit 0
+            echo 'LIVE_DATABASE_URL secret tanımlı değil; canlı ingest çalıştırılmadı.' >&2
+            exit 1
           fi
           set -o pipefail
           alembic upgrade head
