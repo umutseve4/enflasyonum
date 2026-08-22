@@ -26,14 +26,23 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "HTTP $code"
 
-      - name: Open issue on failure
+      - name: Open or update issue on failure
         if: steps.ping.outputs.code != '200'
         env:
           GH_TOKEN: ${{ github.token }}
+          TITLE: "Watchdog FAIL: /health unhealthy"
+          CODE: ${{ steps.ping.outputs.code }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Watchdog FAIL: /health HTTP ${{ steps.ping.outputs.code }}" \
-            --body "Otomatik bekci: canli site saglikli yanit vermedi. Render loglarini kontrol et. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ISSUE_NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "$TITLE in:title" --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n 1)
+          BODY="Otomatik bekci: canli site saglikli yanit vermedi. HTTP $CODE. Render loglarini kontrol et. Run: $RUN_URL"
+          if [ -n "$ISSUE_NUMBER" ]; then
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
 
       - name: Fail if unhealthy
         if: steps.ping.outputs.code != '200'
