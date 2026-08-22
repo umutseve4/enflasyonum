@@ -1,7 +1,7 @@
-verify-live koşusu: 2026-08-19T16:46:56Z
+verify-live koşusu: 2026-08-22T20:53:49Z
 
 == /health -> HTTP 200, 33 bytes ==
-{"status":"ok","version":"0.5.0"}
+{"status":"ok","version":"0.7.0"}
 
 == /history.svg -> HTTP 200, 803 bytes ==
 SVG kök etiketi bulundu: PASS
@@ -11,7 +11,7 @@ SVG kök etiketi bulundu: PASS
   <rect class="bar" x="184.0" y="96" width="432.0" height="200" rx="4" fill="#8ab4f8"/>
   <text x="400.0" y="88" fill="#e8eaed" text-anchor="middle" font-family="sys
 
-== /card.svg -> HTTP 200, 1621 bytes ==
+== /card.svg -> HTTP 200, 1634 bytes ==
 SVG kök etiketi bulundu: PASS
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="418" viewBox="0 0 800 418" role="img" aria-label="Kişisel enflasyon özet kartı">
   <rect width="800" height="418" rx="24" fill="#101418"/>
@@ -19,7 +19,7 @@ SVG kök etiketi bulundu: PASS
   <text x="40" y="130" fill="#9aa0a6" font-family="system-ui, sans-serif" font-size="20">Senin enflasyonun</text>
   <text x="40" y="196" fill="#f28b82" font-fam
 
-== /export.csv -> HTTP 200, 179 bytes ==
+== /export.csv -> HTTP 200, 322 bytes ==
 hexhead=efbbbf content_type_ok=1 header_ok=1
 CSV doğrulaması (BOM + tam başlık + content-type): PASS
 
