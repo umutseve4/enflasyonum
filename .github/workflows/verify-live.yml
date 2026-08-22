@@ -1,11 +1,12 @@
 name: verify-live
 
-# Canlı doğrulama deseni: bu dosya push edilince koşar, canlı URL'yi yoklar,
+# Canlı doğrulama deseni: bu dosya main'e push edilince koşar, canlı URL'yi yoklar,
 # kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
 # NOT: /export.csv kişisel harcama verisi içerebilir — gövdesi ASLA kanıt
 # dosyasına yazılmaz; yalnız güvenli metadata (kod, boyut, hexhead, boolean'lar).
 on:
   push:
+    branches: [main]
     paths:
       - ".github/workflows/verify-live.yml"
   workflow_dispatch:
