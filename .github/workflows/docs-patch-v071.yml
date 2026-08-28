@@ -1,0 +1,100 @@
+name: docs-patch-v071
+
+on:
+  push:
+    branches: [docs/finalize-v071-usage-progress]
+    paths: [.github/workflows/docs-patch-v071.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: docs/finalize-v071-usage-progress
+      - name: Patch checkpoint and roadmap
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          checkpoint = Path('docs/checkpoints/2026-08-28-m1-usage-progress.md')
+          text = checkpoint.read_text(encoding='utf-8')
+          old = '''## Kabul kanıtı
+
+PR, exact head SHA, hosted CI run/job kimlikleri, merge SHA ve mümkünse privacy-safe canlı kontrat doğrulaması tamamlandığında buraya ve issue #25'e eklenecektir.
+'''
+          new = '''## Kabul kanıtı
+
+### Özellik PR'si #26
+
+- Final head: `129899dd31e89e165f645c6581e14ab6a61b2a1c`
+- CI run: `33207614329`
+- Python 3.11 job: `98972581062` — success
+- Python 3.12 job: `98972581051` — success
+- Python 3.13 job: `98972580806` — success
+- Bağımsız QA: `PASS` (conversation `84829ffc-2a55-4011-a374-11b21e7e6b19`)
+- Squash merge: `b0f1cca22d2cb9c75562b9312561165ee54af46e` (`2026-08-28T20:19:11Z`)
+
+### İlk canlı doğrulama
+
+- Run: `33207721135`
+- Job: `98972947992`
+- Sonuç: `Failure`; süre `14s`; exit code `1`
+- Artifact veya yeni bot commit'i oluşmadı.
+- Exact kök neden log erişimi olmadığı için bilinmiyor; olasılıklar gerçek neden olarak kaydedilmedi.
+
+### Kanıt bağlı yeniden tetikleme PR'si #27
+
+- Final head: `5c210e093d4f6d7c28a557a628369089e7fd196c`
+- CI run: `33208038927`
+- Python 3.11 job: `98974038009` — success
+- Python 3.12 job: `98974037968` — success
+- Python 3.13 job: `98974037750` — success
+- Exact diff: `.github/workflows/verify-live.yml` içinde yalnız bir açıklayıcı yorum satırı; runtime ve doğrulama mantığı değişmedi.
+- Squash merge: `d4ff9fd55ad6252398f8eea251de870f403b9447` (`2026-08-28T20:25:25Z`)
+
+### Başarılı canlı kabul
+
+- Workflow run: `33208165567` — `Success` (`16s`)
+- Verify job: `98974471031` — `Success` (`13s`)
+- Tetikleme commit'i: `d4ff9fd55ad6252398f8eea251de870f403b9447`
+- Kalıcı artifact commit'i: `e9091da49fb95a0fbcc78bc7636fa3d8eb38c59e`
+- Artifact timestamp: `2026-08-28T20:25:33Z`
+- `/health`: HTTP `200`, `status=ok`, `version=0.7.1` — PASS
+- `/history.svg`, `/card.svg`, `/export.csv` — PASS
+- `/usage-progress`: HTTP `200`; exact alanlar, türler, hedef ve clamp kontratı — PASS
+- Final artifact sonucu: `SONUC: PASS`
+
+Kanıt yalnız kontrat ve güvenli metadata taşır; gerçek `distinct_days` veya `remaining_days` değerlerini yayımlamaz. Bu feature checkpoint'i kapanabilir, fakat M1 kapanmaz: kamuya açık gösterge `3/14` kalır; ilk kişisel enflasyon sonucu ve M1 Done koşullarının tümü ayrıca doğrulanmalıdır.
+'''
+          if text.count(old) != 1:
+              raise SystemExit('checkpoint anchor mismatch')
+          checkpoint.write_text(text.replace(old, new), encoding='utf-8')
+
+          roadmap = Path('ROADMAP.md')
+          text = roadmap.read_text(encoding='utf-8')
+          old = '''**Sıradaki iş:** 14 gün harcama girişi (M1 Done kapanışı, ~2026-09-01; şu an 3/14 gün). Sonrası: M5 adayları için karar turu. M3.3 Parquet bilinçli deferred.
+'''
+          new = old + '''**v0.7.1 yardımcı ölçüm:** Privacy-safe `GET /usage-progress` canlı kontratı Actions run `33208165567` / job `98974471031` ile PASS; kalıcı kanıt commit'i `e9091da49fb95a0fbcc78bc7636fa3d8eb38c59e`. Endpoint yalnız aggregate ilerlemeyi ölçer, M1'i otomatik kapatmaz ve private sayaç değerleri kamuya açık kanıta taşınmaz; kamu göstergesi `3/14` kalır. M3.3 `deferred`, M5 beklemede.
+'''
+          if text.count(old) != 1:
+              raise SystemExit('roadmap status anchor mismatch')
+          text = text.replace(old, new)
+          marker = '''| 2026-08-20 | **M3.2 verified — bildirim döngüsü üretimde kanıtlandı.**'''
+          row = '''| 2026-08-28 | **v0.7.1 privacy-safe kullanım ilerlemesi:** `GET /usage-progress` yalnız `distinct_days`, `target_days`, `remaining_days`, `complete` aggregate alanlarını döndürür; tarih, satır, tutar, kategori ve açıklama yayımlamaz. Canlı kontrat run `33208165567` / job `98974471031` ile PASS; artifact commit `e9091da49fb95a0fbcc78bc7636fa3d8eb38c59e`. | Ölçüm ile milestone hükmünü ayır: endpoint 14 farklı günü ölçer, M1'i otomatik kapatmaz. Private sayaç değerleri ROADMAP/issue/artifact'a taşınmaz; kamu göstergesi `3/14` kalır. M3.3 `deferred`, M5 beklemede. |
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('roadmap decision anchor mismatch')
+          text = text.replace(marker, row + marker)
+          roadmap.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit documentation
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add ROADMAP.md docs/checkpoints/2026-08-28-m1-usage-progress.md
+          git commit -m "docs: finalize v0.7.1 usage-progress evidence"
+          git push
