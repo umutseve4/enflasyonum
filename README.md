@@ -30,7 +30,7 @@ sorusuna doğrulanabilir bir cevap verir.
 - **Özet kartı:** `/card.svg` — paylaşılabilir SVG özet kartı
 - **Geçmiş grafiği:** `/history.svg`
 - **CSV dışa aktarma:** `/export.csv` (CSV-injection korumalı)
-- **TÜİK açıklama günü bildirimi:** yeni TÜFE bülteni yayınlandığında GitHub
+- **TÜİK açıklama günü bildirimi:** yeni TÜFE bülteni yayımlandığında GitHub
   Actions otomatik issue açar (idempotent, `tufe-bildirim` etiketi)
 - **Otomatik günlük veri çekimi:** TCMB EVDS üzerinden resmi TÜFE serisi
   (`TP.TUKFIY2025.GENEL`, 2025=100 bazlı)
@@ -65,14 +65,15 @@ TÜİK/EVDS API ──▶ günlük ingest (GitHub Actions) ──▶ PostgreSQL 
 
 ## Durum (dürüst)
 
-Güncel sürüm **v0.6.0** — ayrıntı için [ROADMAP.md](ROADMAP.md).
+Güncel ve canlıda doğrulanmış sürüm **v0.7.0** — ayrıntı için [ROADMAP.md](ROADMAP.md).
 
 | Aşama | Durum |
 |---|---|
-| M1 — Dikey dilim: giriş + endeks + TÜFE kıyası + canlı deploy | ✅ canlıda doğrulandı |
+| M1 — Dikey dilim: giriş + endeks + TÜFE kıyası + canlı deploy | 🟡 teknik akış canlıda doğrulandı; 14 günlük gerçek kullanım Done kapısı henüz kapanmadı |
 | M2 — 13 ECOICOP alt endeksi + özet kartı + haftalık canlı doğrulama | ✅ canlıda doğrulandı |
 | M3.1 — CSV dışa aktarma | ✅ canlıda doğrulandı |
-| M3.2 — TÜİK açıklama günü bildirimi | 🧪 test edildi + merge; ilk gerçek TÜFE açıklamasında canlı doğrulanacak |
+| M3.2 — TÜİK açıklama günü bildirimi | ✅ gerçek TÜFE açıklamasında issue #16 ile canlıda doğrulandı |
+| M4.1 — Ana sayfa görsel yenilemesi | ✅ PR #15 ve canlı v0.7.0 kullanıcı onayıyla doğrulandı |
 
 Kapsam DIŞI (şimdilik): OCR/fiş okuma, mobil uygulama mağazası, çoklu kullanıcı
 yönetim paneli, tahmin/ML.
