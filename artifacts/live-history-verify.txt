@@ -1,4 +1,4 @@
-verify-live koşusu: 2026-08-22T20:53:49Z
+verify-live koşusu: 2026-08-28T20:02:48Z
 
 == /health -> HTTP 200, 33 bytes ==
 {"status":"ok","version":"0.7.0"}
