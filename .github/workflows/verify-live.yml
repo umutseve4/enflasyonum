@@ -72,9 +72,22 @@ jobs:
               else
                 echo "Usage progress kontratı: FAIL" >> "$OUT"; FAIL=1
               fi
+            elif [ "$P" = "/health" ]; then
+              if [ "$CODE" = "200" ] && python - <<'PY'
+          import json
+          from pathlib import Path
+
+          value = json.loads(Path("/tmp/resp").read_text())
+          assert value.get("status") == "ok"
+          assert value.get("version") == "0.7.1"
+          PY
+              then
+                echo "Health kontratı (status=ok + version=0.7.1): PASS" >> "$OUT"
+              else
+                echo "Health kontratı: FAIL" >> "$OUT"; FAIL=1
+              fi
             else
               [ "$CODE" = "200" ] || FAIL=1
-              head -c 200 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
             fi
           done
           echo "" >> "$OUT"
