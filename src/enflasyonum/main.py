@@ -10,6 +10,7 @@ GET /  -> form, kıyas bloğu, son harcamalar, bu ayın toplamı
 GET /card.svg -> kıyası tek görselde sunan SVG kart
 GET /history.svg -> takvim bazında son 12 ayın aylık toplamları (çubuk grafik)
 GET /export.csv -> tüm harcamaların CSV dökümü (UTF-8 BOM'lu, indirme)
+GET /usage-progress -> M1 için yalnız aggregate kullanım günü ilerlemesi
 POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
 """
 
@@ -55,6 +56,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 #: Ekranda yüzdeler 2 ondalıkla gösterilir; hesap 6 ondalıkla yapılır.
 TWO_DP = Decimal("0.01")
+USAGE_TARGET_DAYS = 14
 
 
 def get_session():
@@ -189,6 +191,21 @@ def _index_context(session: Session, error: str | None = None) -> dict:
 def health() -> dict[str, str]:
     """Canlılık kontrolü — deploy ve CI smoke testinin dayanak noktası."""
     return {"status": "ok", "version": __version__}
+
+
+@app.get("/usage-progress")
+def usage_progress(session: Session = Depends(get_session)) -> dict[str, int | bool]:
+    """M1'in 14 farklı kullanım günü kapısına aggregate ilerlemeyi döndür."""
+    distinct_days = int(
+        session.scalar(select(func.count(func.distinct(Expense.spent_at)))) or 0
+    )
+    remaining_days = max(USAGE_TARGET_DAYS - distinct_days, 0)
+    return {
+        "distinct_days": distinct_days,
+        "target_days": USAGE_TARGET_DAYS,
+        "remaining_days": remaining_days,
+        "complete": distinct_days >= USAGE_TARGET_DAYS,
+    }
 
 
 @app.get("/", response_class=HTMLResponse)

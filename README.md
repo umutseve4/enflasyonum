@@ -20,7 +20,7 @@ Resmi enflasyon bir ortalama sepetin ölçümüdür; kimsenin sepeti ortalama de
 Kişisel sepet ağırlıklarıyla hesaplanan bireysel endeks, "benim enflasyonum kaç?"
 sorusuna doğrulanabilir bir cevap verir.
 
-## Özellikler (canlıda)
+## Özellikler
 
 - **Harcama girişi:** tutar + kategori + tarih (web form)
 - **Kişisel endeks:** kişisel sepet ağırlıklı Laspeyres endeksi, **13 ECOICOP
@@ -30,6 +30,9 @@ sorusuna doğrulanabilir bir cevap verir.
 - **Özet kartı:** `/card.svg` — paylaşılabilir SVG özet kartı
 - **Geçmiş grafiği:** `/history.svg`
 - **CSV dışa aktarma:** `/export.csv` (CSV-injection korumalı)
+- **M1 kullanım ilerlemesi:** `/usage-progress` yalnız `distinct_days`, `target_days`,
+  `remaining_days` ve `complete` aggregate alanlarını döndürür; tarih, tutar,
+  kategori, açıklama veya harcama satırı yayımlamaz
 - **TÜİK açıklama günü bildirimi:** yeni TÜFE bülteni yayımlandığında GitHub
   Actions otomatik issue açar (idempotent, `tufe-bildirim` etiketi)
 - **Otomatik günlük veri çekimi:** TCMB EVDS üzerinden resmi TÜFE serisi
@@ -47,7 +50,7 @@ uvicorn enflasyonum.main:app --reload
 Testler ve lint:
 
 ```bash
-pytest        # 116 test
+pytest
 ruff check src tests
 ```
 
@@ -60,12 +63,14 @@ TÜİK/EVDS API ──▶ günlük ingest (GitHub Actions) ──▶ PostgreSQL 
                                      endeks hesap motoru (Laspeyres, 13 ECOICOP)
                                                         │
                                                         ▼
-                              API ──▶ web UI · /card.svg · /history.svg · /export.csv
+                  API ──▶ web UI · /card.svg · /history.svg · /export.csv · /usage-progress
 ```
 
 ## Durum (dürüst)
 
-Güncel ve canlıda doğrulanmış sürüm **v0.7.0** — ayrıntı için [ROADMAP.md](ROADMAP.md).
+Kod sürümü **v0.7.1** — canlı sürüm ve milestone doğruluğu için [ROADMAP.md](ROADMAP.md).
+`/usage-progress`, M1'in 14 gerçek kullanım günü kapısını yalnız ölçer; milestone'u
+otomatik kapatmaz ve private sayaç sonucu kamuya açık belgelere taşınmaz.
 
 | Aşama | Durum |
 |---|---|
@@ -80,7 +85,7 @@ yönetim paneli, tahmin/ML.
 
 ## Teknoloji
 
-Python 3.11+, FastAPI, PostgreSQL, pytest (116 test), ruff, GitHub Actions CI
+Python 3.11+, FastAPI, PostgreSQL, pytest, ruff, GitHub Actions CI
 (test + lint + canlı smoke).
 
 ## Lisans

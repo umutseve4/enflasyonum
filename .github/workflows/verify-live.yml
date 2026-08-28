@@ -2,8 +2,8 @@ name: verify-live
 
 # Canlı doğrulama deseni: bu dosya main'e push edilince koşar, canlı URL'yi yoklar,
 # kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
-# NOT: /export.csv kişisel harcama verisi içerebilir — gövdesi ASLA kanıt
-# dosyasına yazılmaz; yalnız güvenli metadata (kod, boyut, hexhead, boolean'lar).
+# NOT: /export.csv ve /usage-progress kişisel veri yüzeyleridir; yanıt gövdeleri
+# ASLA kanıta yazılmaz. Yalnız güvenli metadata ve kontrat boolean'ları kaydedilir.
 on:
   push:
     branches: [main]
@@ -28,7 +28,7 @@ jobs:
           BASE="https://enflasyonum-7gcn.onrender.com"
           echo "verify-live koşusu: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
           FAIL=0
-          for P in /health /history.svg /card.svg /export.csv; do
+          for P in /health /history.svg /card.svg /export.csv /usage-progress; do
             CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" --max-time 180 \
                    --retry 6 --retry-delay 20 --retry-all-errors "$BASE$P" || echo "000")
             SIZE=$(wc -c < /tmp/resp | tr -d ' ')
@@ -52,9 +52,42 @@ jobs:
               else
                 echo "CSV doğrulaması: FAIL" >> "$OUT"; FAIL=1
               fi
+            elif [ "$P" = "/usage-progress" ]; then
+              if [ "$CODE" = "200" ] && python - <<'PY'
+          import json
+          from pathlib import Path
+
+          value = json.loads(Path("/tmp/resp").read_text())
+          assert set(value) == {
+              "distinct_days", "target_days", "remaining_days", "complete"
+          }
+          assert type(value["distinct_days"]) is int
+          assert value["target_days"] == 14
+          assert type(value["remaining_days"]) is int
+          assert value["remaining_days"] >= 0
+          assert type(value["complete"]) is bool
+          PY
+              then
+                echo "Usage progress kontratı (alanlar + türler + hedef + clamp): PASS" >> "$OUT"
+              else
+                echo "Usage progress kontratı: FAIL" >> "$OUT"; FAIL=1
+              fi
+            elif [ "$P" = "/health" ]; then
+              if [ "$CODE" = "200" ] && python - <<'PY'
+          import json
+          from pathlib import Path
+
+          value = json.loads(Path("/tmp/resp").read_text())
+          assert value.get("status") == "ok"
+          assert value.get("version") == "0.7.1"
+          PY
+              then
+                echo "Health kontratı (status=ok + version=0.7.1): PASS" >> "$OUT"
+              else
+                echo "Health kontratı: FAIL" >> "$OUT"; FAIL=1
+              fi
             else
               [ "$CODE" = "200" ] || FAIL=1
-              head -c 200 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
             fi
           done
           echo "" >> "$OUT"
@@ -72,6 +105,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/live-history-verify.txt
-          git commit -m "chore: canlı doğrulama kanıtı (history+card+export) [skip ci]" || echo "değişiklik yok"
+          git commit -m "chore: canlı doğrulama kanıtı (history+card+export+usage) [skip ci]" || echo "değişiklik yok"
           git pull --rebase origin main
           git push origin main
