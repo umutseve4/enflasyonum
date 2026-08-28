@@ -78,7 +78,12 @@ def test_usage_progress_counts_distinct_days_only(client, session):
         "complete": False,
     }
     assert "private detail" not in str(payload)
-    assert set(payload) == {"distinct_days", "target_days", "remaining_days", "complete"}
+    assert set(payload) == {
+        "distinct_days",
+        "target_days",
+        "remaining_days",
+        "complete",
+    }
 
 
 def test_usage_progress_completes_at_fourteen_days(client, session):
