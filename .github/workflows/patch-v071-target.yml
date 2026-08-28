@@ -17,6 +17,7 @@ jobs:
           ref: docs/finalize-v071-usage-progress
       - name: Patch target branch roadmap
         run: |
+          # One-shot finalizer; remove this workflow after the target commit appears.
           python - <<'PY'
           from pathlib import Path
           roadmap = Path('ROADMAP.md')
