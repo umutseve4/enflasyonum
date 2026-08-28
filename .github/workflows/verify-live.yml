@@ -2,7 +2,7 @@ name: verify-live
 
 # Canlı doğrulama deseni: bu dosya main'e push edilince koşar, canlı URL'yi yoklar,
 # kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
-# v0.7.1 retry: ilk merge koşusu deploy tamamlanmadan çalıştı; bu yorum kontrollü yeniden tetikler.
+# v0.7.1 retry: ilk merge koşusu başarısız oldu; kök neden bilinmediğinden aynı kapı yeniden çalıştırılır.
 # NOT: /export.csv ve /usage-progress kişisel veri yüzeyleridir; yanıt gövdeleri
 # ASLA kanıta yazılmaz. Yalnız güvenli metadata ve kontrat boolean'ları kaydedilir.
 on:
