@@ -1,153 +1,204 @@
-"""FastAPI application for Enflasyonum."""
+"""FastAPI uygulama giriş noktası.
 
-from __future__ import annotations
+M1.3 kapsamı: /health + tek sayfalık harcama giriş formu.
+M1.6 kapsamı: kıyas bloğu — "senin %Y vs resmi %X" tek ekranda.
+M2.1 kapsamı: kategori satırlarında ECOICOP alt endeks enflasyonu.
+M2.2 kapsamı: /card.svg — paylaşılabilir aylık özet kartı.
+M2.3 kapsamı: /history.svg — aylık harcama geçmişi grafiği.
+M3.1 kapsamı: /export.csv — harcamaların CSV dökümü (veri sahipliği).
+GET /  -> form, kıyas bloğu, son harcamalar, bu ayın toplamı
+GET /card.svg -> kıyası tek görselde sunan SVG kart
+GET /history.svg -> takvim bazında son 12 ayın aylık toplamları (çubuk grafik)
+GET /export.csv -> tüm harcamaların CSV dökümü (UTF-8 BOM'lu, indirme)
+GET /usage-progress -> M1 için yalnız aggregate kullanım günü ilerlemesi
+POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
+"""
 
-import csv
-import io
-import math
-import os
-from datetime import date, datetime
+import logging
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
-from fastapi.staticfiles import StaticFiles
+from fastapi import Depends, FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from enflasyonum import __version__
-from enflasyonum.calculator import calculate_personal_index, format_result
-from enflasyonum.database import get_session, init_db
-from enflasyonum.models import CPIIndex, Category, Expense
+from enflasyonum import __version__, crud
+from enflasyonum.card import render_card_svg
+from enflasyonum.db import create_session_factory
+from enflasyonum.export import expenses_to_csv
+from enflasyonum.history import (
+    monthly_totals,
+    render_history_error_svg,
+    render_history_svg,
+)
+from enflasyonum.models import Category, Expense, OfficialCPI
+from enflasyonum.personal_index import (
+    PersonalIndexError,
+    category_relatives_from_db,
+    category_weights,
+    compute_personal_index,
+    headline_relative,
+)
+from enflasyonum.series import HEADLINE_SERIES
 
-BASE_DIR = Path(__file__).resolve().parent
-app = FastAPI(title="Enflasyonumdan ne haber?", version=__version__)
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
+logger = logging.getLogger(__name__)
 
+app = FastAPI(
+    title="Enflasyonumdan ne haber?",
+    description="Kişisel enflasyon endeksi — kendi sepetinle TÜİK'i kıyasla.",
+    version=__version__,
+)
+
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+#: Ekranda yüzdeler 2 ondalıkla gösterilir; hesap 6 ondalıkla yapılır.
+TWO_DP = Decimal("0.01")
 USAGE_TARGET_DAYS = 14
 
 
-@app.on_event("startup")
-def startup() -> None:
-    init_db()
+def get_session():
+    """İstek başına DB oturumu.
+
+    Not: Her istekte yeni engine kurmak küçük ölçekte kabul edilebilir;
+    testlerin DATABASE_URL'i monkeypatch edebilmesi için bilinçli tercih.
+    Yük artarsa app.state üzerinde tek engine'e geçilecek (ROADMAP notu).
+    """
+    factory = create_session_factory()
+    with factory() as session:
+        yield session
 
 
 def _parse_amount(raw: str) -> Decimal:
-    normalized = raw.strip().replace(",", ".")
+    """'42,50' veya '42.50' -> Decimal('42.50'). Pozitif olmalı."""
     try:
-        value = Decimal(normalized)
+        value = Decimal(raw.strip().replace(",", "."))
     except InvalidOperation as exc:
-        raise ValueError("Tutar sayısal olmalıdır.") from exc
+        raise ValueError(f"Tutar sayı değil: {raw!r}") from exc
     if value <= 0:
-        raise ValueError("Tutar sıfırdan büyük olmalıdır.")
-    return value.quantize(Decimal("0.01"))
+        raise ValueError("Tutar pozitif olmalı")
+    return value
 
 
-def _month_bounds(month: str | None) -> tuple[date | None, date | None]:
-    if not month:
-        return None, None
+def _comparison_context(session: Session) -> dict:
+    """Kıyas bloğu verisi (M1.6 + M2.1).
+
+    Pencere: elimizdeki son resmi TÜFE dönemi (current) vs 12 ay öncesi
+    (base) — yıllık enflasyon. Sepet: harcama içeren son ay
+    (``weights_period``); resmi veri ~1 ay geriden geldiği için sepet ayı
+    pencereden bilinçli olarak ayrıdır. M2.1: alt endeksi olan kategoriler
+    kendi görelisini kullanır; kalanı manşete düşer. Veri eksikse
+    ``comparison=None`` + Türkçe ipucu döner; ana sayfa hiçbir koşulda
+    500 vermez.
+    """
+    latest_cpi = session.scalar(
+        select(func.max(OfficialCPI.period)).where(
+            OfficialCPI.series_code == HEADLINE_SERIES
+        )
+    )
+    latest_expense = session.scalar(select(func.max(Expense.spent_at)))
+
+    if latest_cpi is None:
+        return {
+            "comparison": None,
+            "comparison_hint": "Resmi TÜFE verisi yok — önce ingest çalıştırılmalı.",
+        }
+    if latest_expense is None:
+        return {
+            "comparison": None,
+            "comparison_hint": "Kıyas için önce en az bir harcama gir.",
+        }
+
+    current = latest_cpi
+    base = date(current.year - 1, current.month, 1)
+    basket = date(latest_expense.year, latest_expense.month, 1)
+
     try:
-        start = datetime.strptime(month, "%Y-%m").date().replace(day=1)
-    except ValueError:
-        return None, None
-    if start.month == 12:
-        end = date(start.year + 1, 1, 1)
-    else:
-        end = date(start.year, start.month + 1, 1)
-    return start, end
+        official_pct = ((headline_relative(session, base, current) - 1) * 100).quantize(
+            TWO_DP
+        )
+        category_relatives = category_relatives_from_db(
+            session, base, current, category_weights(session, basket)
+        )
+        result = compute_personal_index(
+            session,
+            base=base,
+            current=current,
+            category_relatives=category_relatives,
+            weights_period=basket,
+        )
+    except PersonalIndexError as exc:
+        return {"comparison": None, "comparison_hint": f"Kıyas hesaplanamadı: {exc}"}
+
+    personal_pct = result.inflation_pct.quantize(TWO_DP)
+    total = sum(result.weights.values())
+    weight_rows = [
+        {
+            "category": cat,
+            "amount": amount,
+            "share_pct": (amount / total * 100).quantize(TWO_DP),
+            "relative_pct": ((result.relatives[cat] - 1) * 100).quantize(TWO_DP),
+            "own_series": cat in category_relatives,
+        }
+        for cat, amount in sorted(
+            result.weights.items(), key=lambda kv: kv[1], reverse=True
+        )
+    ]
+    return {
+        "comparison": {
+            "personal_pct": personal_pct,
+            "official_pct": official_pct,
+            "diff_pct": (personal_pct - official_pct).quantize(TWO_DP),
+            "base_period": base,
+            "current_period": current,
+            "basket_period": basket,
+            "weight_rows": weight_rows,
+            "weights_total": total,
+        },
+        "comparison_hint": None,
+    }
 
 
 def _index_context(session: Session, error: str | None = None) -> dict:
+    today = date.today()
     rows = session.execute(
         select(Expense, Category.name)
         .join(Category, Expense.category_id == Category.id)
         .order_by(Expense.spent_at.desc(), Expense.id.desc())
         .limit(20)
     ).all()
-    categories = session.scalars(select(Category).order_by(Category.name)).all()
-    result = calculate_personal_index(session)
-    comparison = None
-    if result:
-        comparison = format_result(result)
     return {
-        "expenses": rows,
-        "categories": categories,
-        "comparison": comparison,
+        "expenses": [
+            {
+                "spent_at": exp.spent_at,
+                "category": cat_name,
+                "description": exp.description,
+                "amount": exp.amount,
+            }
+            for exp, cat_name in rows
+        ],
+        "monthly_total": crud.monthly_total(session, today.year, today.month),
+        "today": today,
         "error": error,
         "version": __version__,
-        "today": date.today().isoformat(),
+        **_comparison_context(session),
     }
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request, session: Session = Depends(get_session)):
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context=_index_context(session),
-    )
-
-
-@app.post("/expenses")
-def create_expense(
-    request: Request,
-    amount: str = Form(...),
-    category: str = Form(...),
-    spent_at: date = Form(...),
-    description: str = Form(""),
-    session: Session = Depends(get_session),
-):
-    try:
-        parsed_amount = _parse_amount(amount)
-    except ValueError as exc:
-        context = _index_context(session, str(exc))
-        return templates.TemplateResponse(
-            request=request,
-            name="index.html",
-            context=context,
-            status_code=422,
-        )
-
-    category_name = category.strip()
-    if not category_name:
-        context = _index_context(session, "Kategori boş bırakılamaz.")
-        return templates.TemplateResponse(
-            request=request,
-            name="index.html",
-            context=context,
-            status_code=422,
-        )
-
-    category_row = session.scalar(
-        select(Category).where(func.lower(Category.name) == category_name.lower())
-    )
-    if category_row is None:
-        category_row = Category(name=category_name)
-        session.add(category_row)
-        session.flush()
-
-    session.add(
-        Expense(
-            amount=parsed_amount,
-            category_id=category_row.id,
-            spent_at=spent_at,
-            description=description.strip() or None,
-        )
-    )
-    session.commit()
-    return RedirectResponse(url="/", status_code=303)
+@app.get("/health")
+def health() -> dict[str, str]:
+    """Canlılık kontrolü — deploy ve CI smoke testinin dayanak noktası."""
+    return {"status": "ok", "version": __version__}
 
 
 @app.get("/usage-progress")
 def usage_progress(session: Session = Depends(get_session)) -> dict[str, int | bool]:
-    """Return only aggregate progress toward M1's 14 distinct usage-day gate."""
-    distinct_days = session.scalar(
-        select(func.count(func.distinct(Expense.spent_at)))
-    ) or 0
-    distinct_days = int(distinct_days)
+    """M1'in 14 farklı kullanım günü kapısına aggregate ilerlemeyi döndür."""
+    distinct_days = int(
+        session.scalar(select(func.count(func.distinct(Expense.spent_at)))) or 0
+    )
     remaining_days = max(USAGE_TARGET_DAYS - distinct_days, 0)
     return {
         "distinct_days": distinct_days,
@@ -157,116 +208,117 @@ def usage_progress(session: Session = Depends(get_session)) -> dict[str, int | b
     }
 
 
-@app.get("/export.csv")
-def export_csv(
-    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
-    session: Session = Depends(get_session),
-):
-    start, end = _month_bounds(month)
-    query = (
-        select(Expense, Category.name)
-        .join(Category, Expense.category_id == Category.id)
-        .order_by(Expense.spent_at, Expense.id)
-    )
-    if start and end:
-        query = query.where(Expense.spent_at >= start, Expense.spent_at < end)
-    rows = session.execute(query).all()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["tarih", "kategori", "tutar", "aciklama"])
-    for expense, category_name in rows:
-        writer.writerow(
-            [
-                expense.spent_at.isoformat(),
-                category_name,
-                f"{expense.amount:.2f}",
-                expense.description or "",
-            ]
-        )
-    filename = "enflasyonum.csv" if not month else f"enflasyonum-{month}.csv"
-    return Response(
-        content=output.getvalue(),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-def _empty_svg(message: str) -> str:
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" role="img" aria-label="{message}">
-<rect width="100%" height="100%" fill="#fffaf2"/><text x="50%" y="50%" text-anchor="middle" fill="#4a3f35" font-family="sans-serif" font-size="22">{message}</text></svg>"""
-
-
-def _line_points(values: list[float], width: int, height: int, pad: int) -> str:
-    if not values:
-        return ""
-    low, high = min(values), max(values)
-    span = high - low or 1.0
-    x_span = width - 2 * pad
-    y_span = height - 2 * pad
-    points = []
-    for index, value in enumerate(values):
-        x = pad if len(values) == 1 else pad + index * x_span / (len(values) - 1)
-        y = pad + (high - value) * y_span / span
-        points.append(f"{x:.1f},{y:.1f}")
-    return " ".join(points)
-
-
-@app.get("/history.svg")
-def history_svg(session: Session = Depends(get_session)):
-    expenses = session.scalars(select(Expense).order_by(Expense.spent_at)).all()
-    cpi_rows = session.scalars(select(CPIIndex).order_by(CPIIndex.period)).all()
-    if not expenses or not cpi_rows:
-        return Response(_empty_svg("Grafik için yeterli veri yok"), media_type="image/svg+xml")
-
-    monthly: dict[str, Decimal] = {}
-    for expense in expenses:
-        key = expense.spent_at.strftime("%Y-%m")
-        monthly[key] = monthly.get(key, Decimal("0")) + expense.amount
-    cpi_map = {row.period: float(row.value) for row in cpi_rows}
-    labels = sorted(set(monthly).intersection(cpi_map))
-    if len(labels) < 2:
-        return Response(_empty_svg("Grafik için en az iki ortak ay gerekli"), media_type="image/svg+xml")
-
-    base_spend = float(monthly[labels[0]]) or 1.0
-    base_cpi = cpi_map[labels[0]] or 1.0
-    personal = [float(monthly[label]) / base_spend * 100 for label in labels]
-    official = [cpi_map[label] / base_cpi * 100 for label in labels]
-    width, height, pad = 720, 300, 50
-    all_values = personal + official
-    low, high = min(all_values), max(all_values)
-    if math.isclose(low, high):
-        high = low + 1
-    personal_points = _line_points(personal, width, height, pad)
-    official_points = _line_points(official, width, height, pad)
-    first_label, last_label = labels[0], labels[-1]
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" role="img" aria-label="Kişisel enflasyon ve TÜFE geçmişi">
-<rect width="100%" height="100%" fill="#fffaf2"/><line x1="{pad}" y1="{height-pad}" x2="{width-pad}" y2="{height-pad}" stroke="#cabca8"/>
-<polyline points="{personal_points}" fill="none" stroke="#d95d39" stroke-width="4"/><polyline points="{official_points}" fill="none" stroke="#33658a" stroke-width="4"/>
-<text x="{pad}" y="25" fill="#d95d39" font-family="sans-serif" font-size="16">Kişisel</text><text x="140" y="25" fill="#33658a" font-family="sans-serif" font-size="16">TÜFE</text>
-<text x="{pad}" y="{height-12}" fill="#4a3f35" font-family="sans-serif" font-size="13">{first_label}</text><text x="{width-pad}" y="{height-12}" text-anchor="end" fill="#4a3f35" font-family="sans-serif" font-size="13">{last_label}</text>
-<text x="{width-pad}" y="45" text-anchor="end" fill="#4a3f35" font-family="sans-serif" font-size="13">Endeks aralığı: {low:.1f}–{high:.1f}</text></svg>"""
-    return Response(svg, media_type="image/svg+xml")
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request, session: Session = Depends(get_session)):
+    return templates.TemplateResponse(request, "index.html", _index_context(session))
 
 
 @app.get("/card.svg")
-def card_svg(session: Session = Depends(get_session)):
-    result = calculate_personal_index(session)
-    if not result:
-        return Response(_empty_svg("Henüz hesaplanabilir sonuç yok"), media_type="image/svg+xml")
-    formatted = format_result(result)
-    personal = formatted["personal_change"]
-    official = formatted["official_change"]
-    difference = formatted["difference"]
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" role="img" aria-label="Enflasyonum sonuç kartı">
-<defs><linearGradient id="bg" x1="0" x2="1"><stop offset="0" stop-color="#fff3df"/><stop offset="1" stop-color="#f7d6bd"/></linearGradient></defs>
-<rect width="100%" height="100%" rx="28" fill="url(#bg)"/><text x="48" y="65" fill="#4a2f25" font-family="sans-serif" font-size="30" font-weight="700">Enflasyonumdan ne haber?</text>
-<text x="48" y="120" fill="#6a4b3c" font-family="sans-serif" font-size="18">{formatted['start_period']} → {formatted['end_period']}</text>
-<text x="48" y="188" fill="#d95d39" font-family="sans-serif" font-size="25" font-weight="700">Kişisel: %{personal}</text><text x="48" y="235" fill="#33658a" font-family="sans-serif" font-size="25" font-weight="700">TÜFE: %{official}</text>
-<text x="48" y="292" fill="#4a2f25" font-family="sans-serif" font-size="22">Fark: {difference} yüzde puan</text><text x="672" y="330" text-anchor="end" fill="#8c6b58" font-family="sans-serif" font-size="14">v{__version__}</text></svg>"""
-    return Response(svg, media_type="image/svg+xml")
+def card(session: Session = Depends(get_session)) -> Response:
+    """Paylaşılabilir aylık özet kartı (M2.2).
+
+    Ana sayfayla aynı kıyas verisini SVG olarak sunar; veri eksikse
+    ipucu kartı döner — asla 500 vermez. Cache kapalı: kart her istekte
+    güncel veriden üretilir.
+    """
+    ctx = _comparison_context(session)
+    svg = render_card_svg(ctx["comparison"], ctx["comparison_hint"], __version__)
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
-@app.get("/health")
-def health() -> JSONResponse:
-    return JSONResponse({"status": "ok", "version": __version__, "database": os.getenv("DATABASE_URL", "sqlite")[:12]})
+@app.get("/history.svg")
+def history(session: Session = Depends(get_session)) -> Response:
+    """Aylık harcama geçmişi grafiği (M2.3).
+
+    Tüm harcamaları çekip Python tarafında takvim ayı bazında toplar
+    (gerekçe: history.py modül docstring'i). Veri yokken Türkçe ipucu,
+    beklenmeyen hatada (örn. DB erişilemez) hata kartı döner — asla
+    500 vermez. Cache kapalı: grafik her istekte güncel veriden üretilir.
+    """
+    try:
+        rows = session.execute(select(Expense.spent_at, Expense.amount)).all()
+        svg = render_history_svg(monthly_totals(rows), __version__)
+    except Exception:
+        logger.exception("history.svg üretilemedi; hata kartı dönülüyor")
+        svg = render_history_error_svg(__version__)
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/export.csv")
+def export_csv(session: Session = Depends(get_session)) -> Response:
+    """Harcamaların CSV dökümü (M3.1) — veri sahipliği.
+
+    Tüm harcamaları kategori adıyla birleştirip tarih sırasında CSV
+    olarak indirir. UTF-8 BOM: Excel'in Türkçe karakterleri doğru
+    açması için. Boş DB'de yalnız başlık satırı, beklenmeyen hatada da
+    başlık satırı döner — asla 500 vermez. Cache kapalı.
+    """
+    try:
+        rows = session.execute(
+            select(
+                Expense.spent_at, Category.name, Expense.description, Expense.amount
+            )
+            .join(Category, Expense.category_id == Category.id)
+            .order_by(Expense.spent_at, Expense.id)
+        ).all()
+        body = "\ufeff" + expenses_to_csv(rows)
+    except Exception:
+        logger.exception("export.csv üretilemedi; başlık satırı dönülüyor")
+        body = "\ufeff" + expenses_to_csv([])
+    return Response(
+        content=body,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="enflasyonum-harcamalar.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.post("/expenses")
+def create_expense(
+    request: Request,
+    session: Session = Depends(get_session),
+    description: str = Form(...),
+    amount: str = Form(...),
+    category: str = Form(...),
+    spent_at: date = Form(...),
+):
+    description = description.strip()
+    category = category.strip().lower()
+    error: str | None = None
+    if not description:
+        error = "Açıklama boş olamaz."
+    elif not category:
+        error = "Kategori boş olamaz."
+    else:
+        try:
+            value = _parse_amount(amount)
+        except ValueError as exc:
+            error = str(exc)
+
+    if error is not None:
+        return templates.TemplateResponse(
+            request,
+            "index.html",
+            _index_context(session, error=error),
+            status_code=422,
+        )
+
+    crud.add_expense(
+        session,
+        category_name=category,
+        description=description,
+        amount=value,
+        spent_at=spent_at,
+    )
+    # PRG: POST sonrası 303 -> tarayıcıda F5 çift kayıt üretmez.
+    return RedirectResponse(url="/", status_code=303)
