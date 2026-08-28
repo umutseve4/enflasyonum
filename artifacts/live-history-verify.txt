@@ -1,7 +1,7 @@
-verify-live koşusu: 2026-08-28T20:02:48Z
+verify-live koşusu: 2026-08-28T20:25:33Z
 
 == /health -> HTTP 200, 33 bytes ==
-{"status":"ok","version":"0.7.0"}
+Health kontratı (status=ok + version=0.7.1): PASS
 
 == /history.svg -> HTTP 200, 803 bytes ==
 SVG kök etiketi bulundu: PASS
@@ -22,6 +22,9 @@ SVG kök etiketi bulundu: PASS
 == /export.csv -> HTTP 200, 322 bytes ==
 hexhead=efbbbf content_type_ok=1 header_ok=1
 CSV doğrulaması (BOM + tam başlık + content-type): PASS
+
+== /usage-progress -> HTTP 200, 72 bytes ==
+Usage progress kontratı (alanlar + türler + hedef + clamp): PASS
 
 ===== OTOMATIK KONTROL =====
 SONUC: PASS
