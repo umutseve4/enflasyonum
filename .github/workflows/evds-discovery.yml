@@ -1,14 +1,14 @@
 name: evds-discovery
 
-# Tek seferlik keşif: 2025=100 bazlı yeni TÜFE serisinin EVDS kodunu bulur.
+# Tek seferlik/operasyonel keşif: 2025=100 bazlı yeni TÜFE serisinin EVDS kodunu bulur.
+# Yalnızca yetkili bir kullanıcının açık workflow_dispatch çağrısıyla çalışır.
+# PR/push doğrulama sinyali değildir; Dependabot gibi bot branch'lerinde secret ve
+# contents:write yetkisi bulunmadığından otomatik tetiklenmesi yanlış kırmızı üretir.
 # Strateji: (1) metadata endpoint'lerini birkaç biçimde dene,
 # (2) aday veri gruplarının seri listesini çek,
 # (3) aday seri kodlarını canlı veri isteğiyle probe et.
-# Hiçbir adım workflow'u düşürmez; sonuç her durumda commit edilir.
+# Hiçbir sorgu adımı workflow'u düşürmez; sonuç her durumda main'e commit edilir.
 on:
-  push:
-    paths:
-      - ".github/workflows/evds-discovery.yml"
   workflow_dispatch:
 
 permissions:
