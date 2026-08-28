@@ -30,7 +30,7 @@ jobs:
           fi
 
       - name: Check out current main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: refs/heads/main
           fetch-depth: 1
