@@ -1,5 +1,5 @@
 # Canlı EVDS ingest doğrulaması
-tarih: 2026-08-28T19:59:47Z
+tarih: 2026-08-28T20:03:09Z
 exit codes: run1=0 run2=0
 
 --- KOSU 1 ---
