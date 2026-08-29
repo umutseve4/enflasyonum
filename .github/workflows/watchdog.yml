@@ -1,14 +1,13 @@
-# Haftalık /health smoke — ürün gözetimi. Hata olursa idempotent GitHub Issue.
 name: watchdog
 
 on:
   schedule:
-    - cron: "15 8 * * 1" # her Pazartesi 08:15 UTC
-  workflow_dispatch: {}
+    - cron: "15 8 * * *"
+  workflow_dispatch:
 
 permissions:
-  contents: read
   issues: write
+  contents: read
 
 concurrency:
   group: health-watchdog
@@ -19,38 +18,53 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check /health
-        id: check
+      - name: Ping /health
+        id: ping
         run: |
           set +e
-          code=$(curl -sS --max-time 180 --retry 3 --retry-delay 20 \
-                 -o /tmp/health -w "%{http_code}" \
-                 https://enflasyonum-7gcn.onrender.com/health)
-          curl_rc=$?
-          echo "http_code=$code" >> "$GITHUB_OUTPUT"
-          echo "curl_rc=$curl_rc" >> "$GITHUB_OUTPUT"
-          if [ "$curl_rc" -ne 0 ] || [ "$code" != "200" ]; then exit 1; fi
-          python - <<'PY'
+          code=$(curl -sS -o /tmp/health -w "%{http_code}" \
+            --max-time 90 \
+            --retry 5 \
+            --retry-delay 20 \
+            --retry-all-errors \
+            https://enflasyonum-7gcn.onrender.com/health) || code="000"
+
+          contract_ok=false
+          if [ "$code" = "200" ] && python - <<'PY'
           import json
-          p = json.load(open('/tmp/health'))
-          assert p.get('status') == 'ok', p
-          assert p.get('version') == '0.7.1', p
+          from pathlib import Path
+
+          value = json.loads(Path("/tmp/health").read_text())
+          assert value.get("status") == "ok"
+          assert value.get("version") == "0.7.1"
           PY
-      - name: Open or update failure issue
-        if: failure()
+          then
+            contract_ok=true
+          fi
+
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "contract_ok=$contract_ok" >> "$GITHUB_OUTPUT"
+          echo "HTTP $code; contract_ok=$contract_ok"
+
+      - name: Open or update issue on failure
+        if: steps.ping.outputs.code != '200' || steps.ping.outputs.contract_ok != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          CODE: ${{ steps.check.outputs.http_code }}
-          CURL_RC: ${{ steps.check.outputs.curl_rc }}
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: "Watchdog FAIL: /health unhealthy"
+          CODE: ${{ steps.ping.outputs.code }}
+          CONTRACT_OK: ${{ steps.ping.outputs.contract_ok }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          TITLE="[WATCHDOG] /health başarısız"
-          BODY="Otomatik sağlık kontrolü başarısız oldu. HTTP: ${CODE:-yok}, curl_rc: ${CURL_RC:-yok}. Koşu: $RUN_URL"
-          NUM=$(gh issue list --state open --search '"[WATCHDOG] /health başarısız" in:title' --json number,title \
-                --jq '.[] | select(.title == "[WATCHDOG] /health başarısız") | .number' | head -1)
-          if [ -n "$NUM" ]; then
-            gh issue comment "$NUM" --body "$BODY"
+          ISSUE_NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "$TITLE in:title" --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n 1)
+          BODY="Otomatik bekci: canli site saglikli yanit vermedi. HTTP $CODE, contract_ok=$CONTRACT_OK. Render loglarini kontrol et. Run: $RUN_URL"
+          if [ -n "$ISSUE_NUMBER" ]; then
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
-            gh issue create --title "$TITLE" --body "$BODY" --label "bug"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
           fi
+
+      - name: Fail if unhealthy
+        if: steps.ping.outputs.code != '200' || steps.ping.outputs.contract_ok != 'true'
+        run: exit 1
