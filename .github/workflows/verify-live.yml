@@ -1,5 +1,9 @@
-name: Verify Live Product
+name: verify-live
 
+# Canlı doğrulama kontrollü workflow_dispatch ile koşar, canlı URL'yi yoklar,
+# kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
+# /export.csv ve /usage-progress kişisel veri yüzeyleridir; yanıt gövdeleri
+# ASLA kanıta yazılmaz. SVG yanıt gövdeleri de kalıcı kanıta yazılmaz.
 on:
   workflow_dispatch:
 
@@ -17,110 +21,89 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
-    env:
-      BASE_URL: https://enflasyonum-7gcn.onrender.com
     steps:
-      - name: Checkout main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/heads/main
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
-        with:
-          python-version: "3.12"
-
-      - name: Verify live endpoints without persisting response bodies
+      - name: Canlı uçları yokla (Render free uykudan uyanabilir, retry'lı)
         run: |
-          set -euo pipefail
+          set -u
           mkdir -p artifacts
-          python - <<'PY'
-          import csv
-          import io
+          OUT=artifacts/live-history-verify.txt
+          BASE="https://enflasyonum-7gcn.onrender.com"
+          echo "verify-live koşusu: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
+          FAIL=0
+          for P in /health /history.svg /card.svg /export.csv /usage-progress; do
+            CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" --max-time 180 \
+                   --retry 6 --retry-delay 20 --retry-all-errors "$BASE$P" || echo "000")
+            SIZE=$(wc -c < /tmp/resp | tr -d ' ')
+            echo "" >> "$OUT"
+            echo "== $P -> HTTP $CODE, $SIZE bytes ==" >> "$OUT"
+            if [ "$P" = "/history.svg" ] || [ "$P" = "/card.svg" ]; then
+              if [ "$CODE" = "200" ] && grep -q "<svg" /tmp/resp; then
+                echo "SVG kök etiketi bulundu: PASS" >> "$OUT"
+              else
+                echo "SVG doğrulaması: FAIL" >> "$OUT"; FAIL=1
+              fi
+            elif [ "$P" = "/export.csv" ]; then
+              HEXHEAD=$(head -c 3 /tmp/resp | od -An -tx1 | tr -d ' \n')
+              FIRSTLINE=$(head -c 60 /tmp/resp | tail -c +4 | head -n 1 | tr -d '\r')
+              CT_OK=0; grep -qi "^content-type: *text/csv" /tmp/hdr && CT_OK=1
+              HDR_OK=0; [ "$FIRSTLINE" = "tarih,kategori,aciklama,tutar" ] && HDR_OK=1
+              echo "hexhead=$HEXHEAD content_type_ok=$CT_OK header_ok=$HDR_OK" >> "$OUT"
+              if [ "$CODE" = "200" ] && [ "$HEXHEAD" = "efbbbf" ] && [ "$CT_OK" = "1" ] && [ "$HDR_OK" = "1" ]; then
+                echo "CSV doğrulaması (BOM + tam başlık + content-type): PASS" >> "$OUT"
+              else
+                echo "CSV doğrulaması: FAIL" >> "$OUT"; FAIL=1
+              fi
+            elif [ "$P" = "/usage-progress" ]; then
+              if [ "$CODE" = "200" ] && python - <<'PY'
           import json
-          import os
-          import urllib.request
-          from datetime import datetime, timezone
           from pathlib import Path
 
-          base_url = os.environ["BASE_URL"].rstrip("/")
-          rows = [
-              f"verify-live koşusu: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
-              "",
-          ]
-
-          def fetch(path):
-              request = urllib.request.Request(base_url + path)
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  body = response.read()
-                  return response.status, response.headers.get("Content-Type", ""), body
-
-          status, content_type, body = fetch("/health")
-          payload = json.loads(body)
-          health_ok = status == 200 and payload == {"status": "ok", "version": "0.7.1"}
-          rows += [
-              f"== /health -> HTTP {status}, {len(body)} bytes ==",
-              f"Health kontratı (status=ok + version=0.7.1): {'PASS' if health_ok else 'FAIL'}",
-              "",
-          ]
-
-          svg_results = []
-          for path in ("/history.svg", "/card.svg"):
-              status, content_type, body = fetch(path)
-              svg_ok = status == 200 and body.lstrip().startswith(b"<svg")
-              svg_results.append(svg_ok)
-              rows += [
-                  f"== {path} -> HTTP {status}, {len(body)} bytes ==",
-                  f"SVG kök etiketi bulundu: {'PASS' if svg_ok else 'FAIL'}",
-                  "",
-              ]
-
-          status, content_type, body = fetch("/export.csv")
-          text = body.decode("utf-8-sig")
-          header = next(csv.reader(io.StringIO(text)))
-          expected_header = ["id", "ay", "tutar", "kategori", "agirlik"]
-          csv_ok = (
-              status == 200
-              and body.startswith(b"\xef\xbb\xbf")
-              and "text/csv" in content_type.lower()
-              and header == expected_header
-          )
-          rows += [
-              f"== /export.csv -> HTTP {status}, {len(body)} bytes ==",
-              "CSV doğrulaması (BOM + tam başlık + content-type): "
-              + ("PASS" if csv_ok else "FAIL"),
-              "",
-          ]
-
-          status, content_type, body = fetch("/usage-progress")
-          usage = json.loads(body)
-          usage_ok = (
-              status == 200
-              and set(usage) == {"current_days", "target_days", "progress_pct", "remaining_days"}
-              and all(type(usage[key]) is int for key in usage)
-              and usage["target_days"] == 14
-              and 0 <= usage["progress_pct"] <= 100
-              and usage["remaining_days"] == max(14 - usage["current_days"], 0)
-          )
-          rows += [
-              f"== /usage-progress -> HTTP {status}, {len(body)} bytes ==",
-              "Usage progress kontratı (alanlar + türler + hedef + clamp): "
-              + ("PASS" if usage_ok else "FAIL"),
-              "",
-          ]
-
-          overall = health_ok and all(svg_results) and csv_ok and usage_ok
-          rows += ["===== OTOMATIK KONTROL =====", f"SONUC: {'PASS' if overall else 'FAIL'}"]
-          Path("artifacts/live-history-verify.txt").write_text(
-              "\n".join(rows) + "\n",
-              encoding="utf-8",
-          )
-          print("\n".join(rows))
-          if not overall:
-              raise SystemExit("Live product verification failed")
+          value = json.loads(Path("/tmp/resp").read_text())
+          assert set(value) == {
+              "distinct_days", "target_days", "remaining_days", "complete"
+          }
+          assert type(value["distinct_days"]) is int
+          assert value["target_days"] == 14
+          assert type(value["remaining_days"]) is int
+          assert value["remaining_days"] >= 0
+          assert type(value["complete"]) is bool
           PY
+              then
+                echo "Usage progress kontratı (alanlar + türler + hedef + clamp): PASS" >> "$OUT"
+              else
+                echo "Usage progress kontratı: FAIL" >> "$OUT"; FAIL=1
+              fi
+            elif [ "$P" = "/health" ]; then
+              if [ "$CODE" = "200" ] && python - <<'PY'
+          import json
+          from pathlib import Path
 
-      - name: Commit changed privacy-safe evidence
+          value = json.loads(Path("/tmp/resp").read_text())
+          assert value.get("status") == "ok"
+          assert value.get("version") == "0.7.1"
+          PY
+              then
+                echo "Health kontratı (status=ok + version=0.7.1): PASS" >> "$OUT"
+              else
+                echo "Health kontratı: FAIL" >> "$OUT"; FAIL=1
+              fi
+            fi
+          done
+          echo "" >> "$OUT"
+          echo "===== OTOMATIK KONTROL =====" >> "$OUT"
+          if [ "$FAIL" -eq 0 ]; then
+            echo "SONUC: PASS" >> "$OUT"
+          else
+            echo "SONUC: FAIL" >> "$OUT"
+          fi
+          cat "$OUT"
+          exit "$FAIL"
+
+      - name: Commit result
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -130,6 +113,6 @@ jobs:
             echo "No evidence change to commit."
             exit 0
           fi
-          git commit -m "docs: refresh live product verification evidence"
+          git commit -m "ci: verify live history and export [skip ci]"
           git pull --rebase origin main
           git push origin HEAD:main

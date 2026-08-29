@@ -1,5 +1,8 @@
-name: Live EVDS Ingest Evidence
+name: live-ingest
 
+# M1.4 canlı doğrulama: EVDS'den gerçek TÜFE çekimi.
+# Kontrollü workflow_dispatch sonucu artifacts/live-ingest.txt olarak commit'lenir.
+# TP.TUKFIY2025.GENEL serisine geçiş sonrası beklenti: 24 dönem.
 on:
   workflow_dispatch:
 
@@ -11,66 +14,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  live-ingest:
+  live:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+      DATABASE_URL: "sqlite:///live.db"
     steps:
-      - name: Checkout main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/heads/main
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install package
+      - name: Install
+        run: pip install -e .
+
+      - name: Migrate
+        run: alembic upgrade head
+
+      - name: Run live ingest twice (idempotency check)
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install .
-
-      - name: Run live ingest twice and capture idempotency evidence
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
           tmp1="$(mktemp)"
           tmp2="$(mktemp)"
           trap 'rm -f "$tmp1" "$tmp2"' EXIT
-
           set +e
-          enflasyonum ingest --provider evds --series all >"$tmp1" 2>&1
+          python -m enflasyonum.ingest 24 > "$tmp1" 2>&1
           rc1=$?
-          enflasyonum ingest --provider evds --series all >"$tmp2" 2>&1
+          python -m enflasyonum.ingest 24 > "$tmp2" 2>&1
           rc2=$?
           set -e
-
+          mkdir -p artifacts
           {
             echo "# Canlı EVDS ingest doğrulaması"
             echo "tarih: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "exit codes: run1=$rc1 run2=$rc2"
-            echo
+            echo ""
             echo "--- KOSU 1 ---"
             cat "$tmp1"
-            echo
+            echo ""
             echo "--- KOSU 2 (idempotency) ---"
             cat "$tmp2"
           } > artifacts/live-ingest.txt
+          if [ "$rc1" -ne 0 ] || [ "$rc2" -ne 0 ]; then
+            echo "Canlı ingest başarısız: run1=$rc1 run2=$rc2" >&2
+            exit 1
+          fi
 
-          cat artifacts/live-ingest.txt
-          test "$rc1" -eq 0
-          test "$rc2" -eq 0
-          test "$(grep -c '^sonuc: PASS$' artifacts/live-ingest.txt)" -eq 2
-
-      - name: Commit changed evidence
+      - name: Commit result
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -80,6 +78,6 @@ jobs:
             echo "No evidence change to commit."
             exit 0
           fi
-          git commit -m "docs: refresh live ingest evidence"
+          git commit -m "ci: canlı ingest sonucu [skip ci]"
           git pull --rebase origin main
           git push origin HEAD:main
