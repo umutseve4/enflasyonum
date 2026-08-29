@@ -1,4 +1,4 @@
-name: watchdog
+name: Health Watchdog
 
 on:
   schedule:
@@ -6,44 +6,63 @@ on:
   workflow_dispatch:
 
 permissions:
-  issues: write
   contents: read
+  issues: write
+
+concurrency:
+  group: health-watchdog
+  cancel-in-progress: false
 
 jobs:
   health:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_URL: https://enflasyonum-7gcn.onrender.com
     steps:
-      - name: Ping /health
-        id: ping
+      - name: Check health contract
+        id: health
         run: |
-          code=$(curl -sS -o /dev/null -w "%{http_code}" \
-            --max-time 90 \
-            --retry 5 \
-            --retry-delay 20 \
-            --retry-all-errors \
-            https://enflasyonum-7gcn.onrender.com/health) || code="000"
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
 
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "HTTP $code"
+          url = os.environ["BASE_URL"].rstrip("/") + "/health"
+          with urllib.request.urlopen(url, timeout=30) as response:
+              body = response.read()
+              status = response.status
+          payload = json.loads(body)
+          if status != 200 or payload != {"status": "ok", "version": "0.7.1"}:
+              raise SystemExit(
+                  f"health contract failed: HTTP {status}, payload={payload!r}"
+              )
+          print("health contract: PASS")
+          PY
 
-      - name: Open or update issue on failure
-        if: steps.ping.outputs.code != '200'
+      - name: Open or update a GitHub Issue on failure
+        if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: "Watchdog FAIL: /health unhealthy"
-          CODE: ${{ steps.ping.outputs.code }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          ISSUE_NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
-            --search "$TITLE in:title" --json number,title \
-            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n 1)
-          BODY="Otomatik bekci: canli site saglikli yanit vermedi. HTTP $CODE. Render loglarini kontrol et. Run: $RUN_URL"
-          if [ -n "$ISSUE_NUMBER" ]; then
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
-          else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
-          fi
+          set -euo pipefail
+          title="Health watchdog failed"
+          body=$(cat <<EOF
+          The production health contract failed.
 
-      - name: Fail if unhealthy
-        if: steps.ping.outputs.code != '200'
-        run: exit 1
+          - Workflow run: ${RUN_URL}
+          - Ref: ${GITHUB_REF}
+          - SHA: ${GITHUB_SHA}
+
+          Inspect the workflow logs for details. No response body or credentials are included in this issue.
+          EOF
+          )
+          issue_number="$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --json number,title --jq '.[] | select(.title == "Health watchdog failed") | .number' | head -n 1)"
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi

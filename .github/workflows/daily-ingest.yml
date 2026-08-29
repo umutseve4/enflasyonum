@@ -1,49 +1,110 @@
-# Günlük EVDS TÜFE ingest — canlı veritabanına.
-# Render'ın cron'u ücretli; GitHub Actions cron ücretsiz ve desen zaten kurulu.
-# Gerekli repo secret'ları: EVDS_API_KEY, LIVE_DATABASE_URL
-# M3.2: ingest çıktısındaki level-triggered marker'dan bildirim issue'su açılır
-# (notify.py, idempotent). Schedule token'ı varsayılan read-only olduğundan
-# permissions bloğu şart.
-name: daily-ingest
+name: Daily Official Data Ingest
 
 on:
   schedule:
-    - cron: "30 7 * * *" # her gün 07:30 UTC (10:30 TR) — TÜİK ~10:00 TR'de açıklar
-  workflow_dispatch: {}
+    - cron: "30 7 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
   issues: write
 
 concurrency:
-  group: daily-ingest
+  group: daily-official-data-ingest
   cancel-in-progress: false
 
 jobs:
   ingest:
+    name: ingest and verify production data
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+      BASE_URL: https://enflasyonum-7gcn.onrender.com
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
-      - name: Install
-        run: pip install .
-      - name: Migrate + ingest (son 24 ay, idempotent)
-        env:
-          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
-          DATABASE_URL: ${{ secrets.LIVE_DATABASE_URL }}
+          cache: pip
+
+      - name: Install package
         run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo 'LIVE_DATABASE_URL secret tanımlı değil; canlı ingest çalıştırılmadı.' >&2
-            exit 1
-          fi
-          set -o pipefail
-          alembic upgrade head
-          python -m enflasyonum.ingest 24 | tee ingest.log
-      - name: Bildirim (M3.2 — yeni TÜFE dönemi issue'su, idempotent)
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Run production ingest twice and verify idempotency
+        id: ingest
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import urllib.request
+
+          def run_ingest():
+              return subprocess.run(
+                  ["enflasyonum", "ingest", "--provider", "evds", "--series", "headline"],
+                  check=True,
+                  capture_output=True,
+                  text=True,
+              )
+
+          def fetch_usage():
+              with urllib.request.urlopen(
+                  f"{os.environ['BASE_URL']}/usage-progress",
+                  timeout=30,
+              ) as response:
+                  return json.load(response)
+
+          first = run_ingest()
+          before = fetch_usage()
+          second = run_ingest()
+          after = fetch_usage()
+
+          if before != after:
+              raise SystemExit(
+                  "usage-progress changed after an idempotent second ingest: "
+                  f"before={before!r}, after={after!r}"
+              )
+
+          print("First ingest completed successfully.")
+          print(first.stdout.strip())
+          print("Second ingest completed successfully.")
+          print(second.stdout.strip())
+          print(f"usage-progress remained stable: {after}")
+          PY
+
+      - name: Open or update a GitHub Issue on failure
+        if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: python -m enflasyonum.notify ingest.log
+          REPO: ${{ github.repository }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Daily ingest failed"
+          body=$(cat <<EOF
+          Automated production ingest failed.
+
+          - Workflow run: ${RUN_URL}
+          - Ref: ${GITHUB_REF}
+          - SHA: ${GITHUB_SHA}
+
+          Inspect the workflow logs for the failing command. No credentials are included in this issue.
+          EOF
+          )
+          issue_number="$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --json number,title --jq '.[] | select(.title == "Daily ingest failed") | .number' | head -n 1)"
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi
