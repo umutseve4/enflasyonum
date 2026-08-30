@@ -1,7 +1,6 @@
 import json
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "persist-evidence.sh"
@@ -35,14 +34,22 @@ def make_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def persist(repo: Path, run_id: int, attempt: int, payload: str, check=True):
+def persist(
+    repo: Path,
+    run_id: int,
+    attempt: int,
+    payload: str,
+    *,
+    source_sha: str = "a" * 40,
+    check: bool = True,
+):
     artifact = repo / "artifacts" / "live.txt"
     artifact.parent.mkdir(exist_ok=True)
     artifact.write_text(payload, encoding="utf-8")
     env = os.environ | {
         "GITHUB_RUN_ID": str(run_id),
         "GITHUB_RUN_ATTEMPT": str(attempt),
-        "GITHUB_SHA": "a" * 40,
+        "GITHUB_SHA": source_sha,
     }
     return run(
         "bash",
@@ -72,10 +79,30 @@ def test_newer_projection_wins_and_each_run_has_a_ref(tmp_path):
     persist(repo, 100, 1, "older\n")
 
     assert latest(repo)["run_id"] == 200
-    assert run("git", "show", "origin/main:artifacts/live.txt", cwd=repo).stdout == "newer\n"
-    refs = run("git", "ls-remote", "--heads", "origin", "refs/heads/evidence/*", cwd=repo).stdout
+    artifact = run("git", "show", "origin/main:artifacts/live.txt", cwd=repo).stdout
+    assert artifact == "newer\n"
+    refs = run(
+        "git",
+        "ls-remote",
+        "--heads",
+        "origin",
+        "refs/heads/evidence/*",
+        cwd=repo,
+    ).stdout
     assert "refs/heads/evidence/live-ingest/200-1" in refs
     assert "refs/heads/evidence/live-ingest/100-1" in refs
+
+
+def test_run_attempt_breaks_ties(tmp_path):
+    repo = make_repo(tmp_path)
+    persist(repo, 500, 1, "attempt one\n")
+    persist(repo, 500, 2, "attempt two\n")
+    persist(repo, 500, 1, "attempt one\n")
+
+    assert latest(repo)["run_id"] == 500
+    assert latest(repo)["run_attempt"] == 2
+    artifact = run("git", "show", "origin/main:artifacts/live.txt", cwd=repo).stdout
+    assert artifact == "attempt two\n"
 
 
 def test_same_identity_and_payload_is_idempotent(tmp_path):
@@ -91,4 +118,45 @@ def test_same_identity_with_different_payload_fails_closed(tmp_path):
     persist(repo, 400, 1, "first\n")
     result = persist(repo, 400, 1, "different\n", check=False)
     assert result.returncode != 0
-    assert run("git", "show", "origin/main:artifacts/live.txt", cwd=repo).stdout == "first\n"
+    artifact = run("git", "show", "origin/main:artifacts/live.txt", cwd=repo).stdout
+    assert artifact == "first\n"
+
+
+def test_invalid_slug_and_traversal_are_rejected(tmp_path):
+    repo = make_repo(tmp_path)
+    artifact = repo / "artifacts" / "live.txt"
+    artifact.parent.mkdir(exist_ok=True)
+    artifact.write_text("payload\n", encoding="utf-8")
+    env = os.environ | {
+        "GITHUB_RUN_ID": "1",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_SHA": "a" * 40,
+    }
+    invalid_slug = run(
+        "bash",
+        "scripts/persist-evidence.sh",
+        "../bad",
+        "artifacts/live.txt",
+        "message",
+        cwd=repo,
+        env=env,
+        check=False,
+    )
+    traversal = run(
+        "bash",
+        "scripts/persist-evidence.sh",
+        "live-ingest",
+        "artifacts/../README.md",
+        "message",
+        cwd=repo,
+        env=env,
+        check=False,
+    )
+    assert invalid_slug.returncode == 64
+    assert traversal.returncode == 64
+
+
+def test_script_never_uses_force_push():
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "--force" not in text
+    assert "--force-with-lease" not in text
