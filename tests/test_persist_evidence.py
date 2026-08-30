@@ -109,7 +109,7 @@ def test_same_identity_and_payload_is_idempotent(tmp_path):
     repo = make_repo(tmp_path)
     persist(repo, 300, 2, "same\n")
     result = persist(repo, 300, 2, "same\n")
-    assert "already exists with identical payload" in result.stdout
+    assert "already exists with identical canonical evidence" in result.stdout
     assert latest(repo)["run_attempt"] == 2
 
 
@@ -122,7 +122,21 @@ def test_same_identity_with_different_payload_fails_closed(tmp_path):
     assert artifact == "first\n"
 
 
-def test_invalid_slug_and_traversal_are_rejected(tmp_path):
+def test_same_identity_with_different_source_sha_fails_closed(tmp_path):
+    repo = make_repo(tmp_path)
+    persist(repo, 450, 1, "same payload\n", source_sha="a" * 40)
+    result = persist(
+        repo,
+        450,
+        1,
+        "same payload\n",
+        source_sha="b" * 40,
+        check=False,
+    )
+    assert result.returncode != 0
+
+
+def test_invalid_slug_and_paths_are_rejected(tmp_path):
     repo = make_repo(tmp_path)
     artifact = repo / "artifacts" / "live.txt"
     artifact.parent.mkdir(exist_ok=True)
@@ -132,28 +146,24 @@ def test_invalid_slug_and_traversal_are_rejected(tmp_path):
         "GITHUB_RUN_ATTEMPT": "1",
         "GITHUB_SHA": "a" * 40,
     }
-    invalid_slug = run(
-        "bash",
-        "scripts/persist-evidence.sh",
-        "../bad",
-        "artifacts/live.txt",
-        "message",
-        cwd=repo,
-        env=env,
-        check=False,
-    )
-    traversal = run(
-        "bash",
-        "scripts/persist-evidence.sh",
-        "live-ingest",
-        "artifacts/../README.md",
-        "message",
-        cwd=repo,
-        env=env,
-        check=False,
-    )
-    assert invalid_slug.returncode == 64
-    assert traversal.returncode == 64
+
+    def invalid(slug, path):
+        return run(
+            "bash",
+            "scripts/persist-evidence.sh",
+            slug,
+            path,
+            "message",
+            cwd=repo,
+            env=env,
+            check=False,
+        )
+
+    assert invalid("../bad", "artifacts/live.txt").returncode != 0
+    assert invalid("live-ingest", "artifacts/../README.md").returncode != 0
+    assert invalid("live-ingest", "artifacts//live.txt").returncode != 0
+    assert invalid("live-ingest", "artifacts/./live.txt").returncode != 0
+    assert invalid("live-ingest", "artifacts/evidence/live-ingest/latest.json").returncode != 0
 
 
 def test_script_never_uses_force_push():
