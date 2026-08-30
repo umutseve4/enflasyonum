@@ -13,10 +13,43 @@ run_id="${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}"
 run_attempt="${GITHUB_RUN_ATTEMPT:?GITHUB_RUN_ATTEMPT is required}"
 source_sha="${GITHUB_SHA:?GITHUB_SHA is required}"
 
-[[ "$slug" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "invalid workflow slug" >&2; exit 64; }
-[[ "$run_id" =~ ^[0-9]+$ && "$run_attempt" =~ ^[0-9]+$ ]] || { echo "run identity must be numeric" >&2; exit 64; }
-[[ "$artifact" =~ ^artifacts/[A-Za-z0-9._/-]+$ && "$artifact" != *".."* ]] || { echo "invalid artifact path" >&2; exit 64; }
-[ -f "$artifact" ] || { echo "artifact not found: $artifact" >&2; exit 66; }
+[[ "$slug" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || {
+  echo "invalid workflow slug" >&2
+  exit 64
+}
+[[ "$run_id" =~ ^[0-9]+$ && "$run_attempt" =~ ^[0-9]+$ ]] || {
+  echo "run identity must be numeric" >&2
+  exit 64
+}
+[[ "$source_sha" =~ ^[0-9a-fA-F]{40}$ ]] || {
+  echo "source SHA must be a 40-character hexadecimal commit ID" >&2
+  exit 64
+}
+[[ "$artifact" =~ ^artifacts/[A-Za-z0-9._/-]+$ ]] || {
+  echo "invalid artifact path" >&2
+  exit 64
+}
+python - "$artifact" <<'PY'
+import sys
+from pathlib import PurePosixPath
+
+raw = sys.argv[1]
+path = PurePosixPath(raw)
+parts = path.parts
+valid = (
+    path.as_posix() == raw
+    and len(parts) >= 2
+    and parts[0] == "artifacts"
+    and all(part not in {"", ".", ".."} for part in parts)
+    and parts[1] != "evidence"
+)
+if not valid:
+    raise SystemExit("artifact path must be canonical and outside artifacts/evidence")
+PY
+[ -f "$artifact" ] || {
+  echo "artifact not found: $artifact" >&2
+  exit 66
+}
 
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -50,29 +83,44 @@ value = {
     "checksum_algorithm": "sha256",
     "payload_sha256": checksum,
 }
-Path(path).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+Path(path).write_text(
+    json.dumps(value, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
 PY
 }
 
 verify_ref() {
   local ref="$1"
   local manifest="$2"
-  git fetch --no-tags origin "+$ref:refs/remotes/evidence-verify/$slug/$run_id-$run_attempt" >/dev/null 2>&1
+  git fetch --no-tags origin "+$ref:refs/remotes/evidence-verify/$slug/$run_id-$run_attempt" \
+    >/dev/null 2>&1
   local commit="refs/remotes/evidence-verify/$slug/$run_id-$run_attempt"
   local remote_checksum
   remote_checksum="$(git show "$commit:$artifact" | sha256sum | awk '{print $1}')"
-  [ "$remote_checksum" = "$checksum" ] || { echo "remote payload checksum mismatch" >&2; return 1; }
+  [ "$remote_checksum" = "$checksum" ] || {
+    echo "remote payload checksum mismatch" >&2
+    return 1
+  }
   git show "$commit:$manifest" > "$work_dir/remote-manifest.json"
-  python - "$work_dir/remote-manifest.json" "$slug" "$run_id" "$run_attempt" "$artifact" "$checksum" <<'PY'
+  python - \
+    "$work_dir/remote-manifest.json" \
+    "$slug" \
+    "$run_id" \
+    "$run_attempt" \
+    "$source_sha" \
+    "$artifact" \
+    "$checksum" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-path, slug, run_id, run_attempt, artifact, checksum = sys.argv[1:]
+path, slug, run_id, run_attempt, source_sha, artifact, checksum = sys.argv[1:]
 value = json.loads(Path(path).read_text(encoding="utf-8"))
 assert value["workflow_slug"] == slug
 assert value["run_id"] == int(run_id)
 assert value["run_attempt"] == int(run_attempt)
+assert value["source_sha"] == source_sha
 assert value["artifact_path"] == artifact
 assert value["checksum_algorithm"] == "sha256"
 assert value["payload_sha256"] == checksum
@@ -83,7 +131,7 @@ PY
 git fetch --no-tags origin main
 if git ls-remote --exit-code --heads origin "$evidence_ref" >/dev/null 2>&1; then
   verify_ref "$evidence_ref" "$record_path"
-  echo "Evidence ref already exists with identical payload: $evidence_ref"
+  echo "Evidence ref already exists with identical canonical evidence: $evidence_ref"
 else
   git checkout --detach origin/main
   mkdir -p "$(dirname "$artifact")"
@@ -132,7 +180,10 @@ PY
       ;;
     same)
       current_checksum="$(sha256sum "$artifact" | awk '{print $1}')"
-      [ "$current_checksum" = "$checksum" ] || { echo "latest artifact checksum mismatch" >&2; exit 1; }
+      [ "$current_checksum" = "$checksum" ] || {
+        echo "latest artifact checksum mismatch" >&2
+        exit 1
+      }
       echo "Main projection already matches this run."
       exit 0
       ;;
@@ -141,7 +192,10 @@ PY
       exit 1
       ;;
     newer) ;;
-    *) echo "unknown projection decision: $decision" >&2; exit 1 ;;
+    *)
+      echo "unknown projection decision: $decision" >&2
+      exit 1
+      ;;
   esac
 
   mkdir -p "$(dirname "$artifact")"
@@ -153,19 +207,72 @@ PY
   if git push origin "$candidate_commit:refs/heads/main"; then
     git fetch --no-tags origin main
     remote_checksum="$(git show origin/main:"$artifact" | sha256sum | awk '{print $1}')"
-    [ "$remote_checksum" = "$checksum" ] || { echo "main payload checksum mismatch" >&2; exit 1; }
     git show origin/main:"$latest_path" > "$work_dir/latest.json"
-    python - "$work_dir/latest.json" "$run_id" "$run_attempt" "$checksum" <<'PY'
+    post_push_decision="$(python - \
+      "$work_dir/latest.json" \
+      "$slug" \
+      "$run_id" \
+      "$run_attempt" \
+      "$artifact" \
+      "$checksum" \
+      "$remote_checksum" <<'PY'
 import json
 import sys
 from pathlib import Path
-value = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert (value["run_id"], value["run_attempt"], value["payload_sha256"]) == (
-    int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
-)
+
+path, slug, run_id, run_attempt, artifact, checksum, remote_checksum = sys.argv[1:]
+value = json.loads(Path(path).read_text(encoding="utf-8"))
+required = {
+    "workflow_slug",
+    "run_id",
+    "run_attempt",
+    "source_sha",
+    "generated_at",
+    "artifact_path",
+    "checksum_algorithm",
+    "payload_sha256",
+}
+assert required <= value.keys()
+assert value["workflow_slug"] == slug
+assert value["artifact_path"] == artifact
+assert value["checksum_algorithm"] == "sha256"
+assert value["payload_sha256"] == remote_checksum
+assert isinstance(value["run_id"], int) and not isinstance(value["run_id"], bool)
+assert isinstance(value["run_attempt"], int) and not isinstance(value["run_attempt"], bool)
+current_key = (value["run_id"], value["run_attempt"])
+candidate_key = (int(run_id), int(run_attempt))
+if current_key > candidate_key:
+    print("superseded")
+elif current_key == candidate_key and value["payload_sha256"] == checksum:
+    print("exact")
+elif current_key == candidate_key:
+    print("conflict")
+else:
+    print("stale")
 PY
-    echo "Main projection persisted and verified."
-    exit 0
+)"
+    case "$post_push_decision" in
+      exact)
+        echo "Main projection persisted and verified."
+        exit 0
+        ;;
+      superseded)
+        echo "Main projection was safely superseded by a newer verified projection."
+        exit 0
+        ;;
+      conflict)
+        echo "same run identity has a different post-push checksum" >&2
+        exit 1
+        ;;
+      stale)
+        echo "main regressed to an older projection after a successful push" >&2
+        exit 1
+        ;;
+      *)
+        echo "unknown post-push decision: $post_push_decision" >&2
+        exit 1
+        ;;
+    esac
   fi
 
   sleep $((attempt * 2 + RANDOM % 3))
