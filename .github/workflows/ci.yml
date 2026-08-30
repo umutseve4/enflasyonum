@@ -34,7 +34,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/enflasyonum_test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/enflasyonum_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -44,8 +44,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install
         run: pip install -e ".[dev]"
+      - name: Validate workflow and helper syntax
+        run: |
+          bash -n scripts/persist-evidence.sh
+          python -m py_compile scripts/evds-discovery.py
+          ruby -ryaml -e 'Dir[".github/workflows/*.{yml,yaml}"].each { |path| YAML.load_file(path) }'
       - name: Lint
-        run: ruff check src tests migrations
+        run: ruff check src tests migrations scripts/evds-discovery.py
       - name: Migration smoke (up + down + up)
         run: |
           alembic upgrade head
