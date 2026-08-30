@@ -48,14 +48,32 @@ jobs:
         run: |
           bash -n scripts/persist-evidence.sh
           python -m py_compile scripts/evds-discovery.py
-          ruby -ryaml -e 'Dir[".github/workflows/*.{yml,yaml}"].each { |path| YAML.load_file(path) }'
+          ruby -e 'require "yaml"; Dir[".github/workflows/*.{yml,yaml}"].each { |f| YAML.load_file(f) }'
       - name: Lint
         run: ruff check src tests migrations scripts/evds-discovery.py
       - name: Migration smoke (up + down + up)
+        shell: bash
         run: |
-          alembic upgrade head
-          alembic downgrade base
-          alembic upgrade head
-          alembic downgrade base
+          set -o pipefail
+          run_migration() {
+            local label="$1"
+            shift
+            local log_file
+            log_file="$(mktemp)"
+            if ! "$@" >"$log_file" 2>&1; then
+              while IFS= read -r line; do
+                printf '::error title=Migration smoke failed (%s)::%s\n' "$label" "$line"
+              done <"$log_file"
+              cat "$log_file"
+              rm -f "$log_file"
+              exit 1
+            fi
+            cat "$log_file"
+            rm -f "$log_file"
+          }
+          run_migration upgrade-1 alembic upgrade head
+          run_migration downgrade alembic downgrade base
+          run_migration upgrade-2 alembic upgrade head
+          run_migration final-downgrade alembic downgrade base
       - name: Test
         run: pytest
