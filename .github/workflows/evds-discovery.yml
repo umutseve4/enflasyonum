@@ -2,21 +2,13 @@ name: evds-discovery
 
 # Tek seferlik/operasyonel keşif: 2025=100 bazlı yeni TÜFE serisinin EVDS kodunu bulur.
 # Yalnızca yetkili bir kullanıcının açık workflow_dispatch çağrısıyla çalışır.
-# PR/push doğrulama sinyali değildir; Dependabot gibi bot branch'lerinde secret ve
-# contents:write yetkisi bulunmadığından otomatik tetiklenmesi yanlış kırmızı üretir.
-# Strateji: (1) metadata endpoint'lerini birkaç biçimde dene,
-# (2) aday veri gruplarının seri listesini çek,
-# (3) aday seri kodlarını canlı veri isteğiyle probe et.
-# Hiçbir sorgu adımı workflow'u düşürmez; sonuç main'e commit edilir.
+# Hiçbir sorgu adımı workflow'u düşürmez; her kabul edilen koşu önce immutable
+# evidence ref'e, ardından latest projection olarak main'e yazılır.
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: evidence-write-main
-  cancel-in-progress: false
 
 jobs:
   discover:
@@ -41,128 +33,14 @@ jobs:
           EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
         run: |
           set -euo pipefail
-          python - <<'EOF' > discovery.txt 2>&1 || true
-          import os, json, httpx
-
-          BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
-          KEY = os.environ["EVDS_API_KEY"]
-          H = {"key": KEY}
-
-          def get(url):
-              r = httpx.get(url, headers=H, timeout=30)
-              return r.status_code, r
-
-          def try_json(label, url):
-              try:
-                  code, r = get(url)
-                  print(f"[{label}] HTTP {code} url={url}")
-                  if code == 200:
-                      try:
-                          return r.json()
-                      except Exception as e:
-                          print(f"[{label}] JSON parse hatasi: {e}; ilk 200 kr: {r.text[:200]}")
-                  else:
-                      print(f"[{label}] govde ilk 200 kr: {r.text[:200]}")
-              except Exception as e:
-                  print(f"[{label}] istek hatasi: {e}")
-              return None
-
-          print("== 1) datagroups endpoint denemeleri ==")
-          groups = None
-          for label, url in [
-              ("dg-a", BASE + "datagroups?mode=0&type=json"),
-              ("dg-b", BASE + "datagroups/mode=0&type=json"),
-              ("dg-c", BASE + "datagroups?mode=2&code=bie_tukfiy&type=json"),
-          ]:
-              data = try_json(label, url)
-              if isinstance(data, list) and data:
-                  groups = data
-                  print(f"[{label}] OK — {len(data)} grup")
-                  break
-
-          cands = []
-          if groups:
-              print()
-              print("== 2) TUFE/2025 gecen gruplar ==")
-              for g in groups:
-                  name = str(g.get("DATAGROUP_NAME") or g.get("DATAGROUP_NAME_ENG") or "")
-                  code = str(g.get("DATAGROUP_CODE") or "")
-                  blob = (name + " " + code).lower()
-                  if any(k in blob for k in ("tuketici", "tüketici", "tufe", "tüfe", "2025")):
-                      cands.append(code)
-                      print(f"GRUP: {code} | {name}")
-
-          if not cands:
-              cands = ["bie_tukfiy", "bie_tukfiy2025", "bie_tufe2025", "bie_oktug2025"]
-              print(f"(metadata yok — varsayilan adaylar: {cands})")
-
-          print()
-          print("== 3) serieList denemeleri ==")
-          for gcode in cands:
-              for label, url in [
-                  (f"sl-a-{gcode}", BASE + f"serieList?type=json&code={gcode}"),
-                  (f"sl-b-{gcode}", BASE + f"serieList/type=json&code={gcode}"),
-              ]:
-                  data = try_json(label, url)
-                  if isinstance(data, list) and data:
-                      for s in data:
-                          scode = str(s.get("SERIE_CODE") or "")
-                          sname = str(s.get("SERIE_NAME") or "")
-                          print(f"SERI: {scode} | {sname} | grup={gcode}")
-                      break
-
-          print()
-          print("== 4) aday seri kodlarini canli probe et (2026 verisi var mi?) ==")
-          probes = [
-              "TP.FG.J0",
-              "TP.FG.J02",
-              "TP.FG25.J0",
-              "TP.TUFE2025.J0",
-              "TP.FG2025.J0",
-          ]
-          hits = []
-          for s in probes:
-              url = (BASE + f"series={s}"
-                     "&startDate=01-01-2026&endDate=01-08-2026&type=json")
-              try:
-                  code, r = get(url)
-                  n = 0
-                  last = ""
-                  if code == 200:
-                      try:
-                          items = r.json().get("items", [])
-                          key = s.replace(".", "_")
-                          vals = [(i.get("Tarih"), i.get(key)) for i in items
-                                  if i.get(key) is not None]
-                          n = len(vals)
-                          last = str(vals[-1]) if vals else ""
-                      except Exception as e:
-                          last = f"parse hatasi: {e}"
-                  print(f"PROBE: {s} -> HTTP {code}, dolu deger: {n}, son: {last}")
-                  if n > 0 and s != "TP.FG.J0":
-                      hits.append(s)
-              except Exception as e:
-                  print(f"PROBE: {s} -> istek hatasi: {e}")
-
-          print()
-          print("===== OTOMATIK KONTROL =====")
-          print(f"yeni seri adayi bulunan: {hits if hits else 'YOK'}")
-          print("sonuc: PASS" if hits else "sonuc: INCONCLUSIVE")
-          EOF
+          python scripts/evds-discovery.py > discovery.txt 2>&1 || true
           cat discovery.txt
 
-      - name: Commit result
+      - name: Persist result
         run: |
-          set -euo pipefail
           mkdir -p artifacts
           cp discovery.txt artifacts/evds-discovery.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/evds-discovery.txt
-          if git diff --cached --quiet; then
-            echo "No evidence change to commit."
-            exit 0
-          fi
-          git commit -m "ci: EVDS keşif sonucu [skip ci]"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          bash scripts/persist-evidence.sh \
+            evds-discovery \
+            artifacts/evds-discovery.txt \
+            "ci: EVDS keşif sonucu"
