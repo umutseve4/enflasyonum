@@ -310,6 +310,7 @@ fi
 
 max_attempts=8
 for attempt in $(seq 1 "$max_attempts"); do
+  verify_ref "$evidence_ref" "$record_path"
   git fetch --no-tags origin main
   projection_tree="$work_dir/projection-tree-$attempt"
   create_worktree "$projection_tree" origin/main
