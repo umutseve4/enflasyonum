@@ -58,12 +58,12 @@ jobs:
           run_migration() {
             local label="$1"
             shift
-            local log_file
+            local log_file message
             log_file="$(mktemp)"
             if ! "$@" >"$log_file" 2>&1; then
-              while IFS= read -r line; do
-                printf '::error title=Migration smoke failed (%s)::%s\n' "$label" "$line"
-              done <"$log_file"
+              message="$(tail -n 25 "$log_file" | tr '\n' ' ')"
+              message="${message//'%'/'%25'}"
+              printf '::error title=Migration smoke failed (%s)::%s\n' "$label" "$message"
               cat "$log_file"
               rm -f "$log_file"
               exit 1
