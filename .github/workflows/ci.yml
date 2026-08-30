@@ -61,7 +61,7 @@ jobs:
             local log_file message
             log_file="$(mktemp)"
             if ! "$@" >"$log_file" 2>&1; then
-              message="$(tail -n 25 "$log_file" | tr '\n' ' ')"
+              message="$(tail -n 25 "$log_file" | tac | tr '\n' ' ')"
               message="${message//'%'/'%25'}"
               printf '::error title=Migration smoke failed (%s)::%s\n' "$label" "$message"
               cat "$log_file"
