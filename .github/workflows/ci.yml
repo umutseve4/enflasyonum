@@ -52,10 +52,22 @@ jobs:
       - name: Lint
         run: ruff check src tests migrations scripts/evds-discovery.py
       - name: Migration smoke (up + down + up)
+        shell: bash
         run: |
-          alembic upgrade head
-          alembic downgrade base
-          alembic upgrade head
-          alembic downgrade base
+          migration_log="$(mktemp)"
+          if ! {
+            alembic upgrade head
+            alembic downgrade base
+            alembic upgrade head
+            alembic downgrade base
+          } >"$migration_log" 2>&1; then
+            exception="$(tail -n 1 "$migration_log")"
+            echo "::error title=Migration smoke failed::$exception"
+            cat "$migration_log"
+            rm -f "$migration_log"
+            exit 1
+          fi
+          cat "$migration_log"
+          rm -f "$migration_log"
       - name: Test
         run: pytest
