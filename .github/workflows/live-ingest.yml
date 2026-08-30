@@ -1,17 +1,13 @@
 name: live-ingest
 
 # M1.4 canlı doğrulama: EVDS'den gerçek TÜFE çekimi.
-# Kontrollü workflow_dispatch sonucu artifacts/live-ingest.txt olarak commit'lenir.
+# Her kabul edilen koşu önce immutable evidence ref'e, ardından latest projection olarak main'e yazılır.
 # TP.TUKFIY2025.GENEL serisine geçiş sonrası beklenti: 24 dönem.
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: evidence-write-main
-  cancel-in-progress: false
 
 jobs:
   live:
@@ -68,16 +64,9 @@ jobs:
             exit 1
           fi
 
-      - name: Commit result
+      - name: Persist result
         run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/live-ingest.txt
-          if git diff --cached --quiet; then
-            echo "No evidence change to commit."
-            exit 0
-          fi
-          git commit -m "ci: canlı ingest sonucu [skip ci]"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          bash scripts/persist-evidence.sh \
+            live-ingest \
+            artifacts/live-ingest.txt \
+            "ci: canlı ingest sonucu"
