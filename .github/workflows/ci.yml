@@ -70,4 +70,18 @@ jobs:
           cat "$migration_log"
           rm -f "$migration_log"
       - name: Test
-        run: pytest
+        shell: bash
+        run: |
+          test_log="$(mktemp)"
+          if ! pytest --tb=short >"$test_log" 2>&1; then
+            failure="$(grep '^FAILED ' "$test_log" | head -n 1 || true)"
+            if [[ -z "$failure" ]]; then
+              failure="$(tail -n 1 "$test_log")"
+            fi
+            echo "::error title=Pytest failed::$failure"
+            cat "$test_log"
+            rm -f "$test_log"
+            exit 1
+          fi
+          cat "$test_log"
+          rm -f "$test_log"
