@@ -1,7 +1,7 @@
 name: verify-live
 
-# Canlı doğrulama kontrollü workflow_dispatch ile koşar, canlı URL'yi yoklar,
-# kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
+# Canlı doğrulama kontrollü workflow_dispatch ile koşar.
+# Her kabul edilen koşu önce immutable evidence ref'e, ardından latest projection olarak main'e yazılır.
 # /export.csv ve /usage-progress kişisel veri yüzeyleridir; yanıt gövdeleri
 # ASLA kanıta yazılmaz. SVG yanıt gövdeleri de kalıcı kanıta yazılmaz.
 on:
@@ -9,10 +9,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: evidence-write-main
-  cancel-in-progress: false
 
 jobs:
   verify:
@@ -103,16 +99,9 @@ jobs:
           cat "$OUT"
           exit "$FAIL"
 
-      - name: Commit result
+      - name: Persist result
         run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/live-history-verify.txt
-          if git diff --cached --quiet; then
-            echo "No evidence change to commit."
-            exit 0
-          fi
-          git commit -m "ci: verify live history and export [skip ci]"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          bash scripts/persist-evidence.sh \
+            verify-live \
+            artifacts/live-history-verify.txt \
+            "ci: verify live history and export"
