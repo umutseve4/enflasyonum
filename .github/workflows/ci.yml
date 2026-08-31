@@ -30,7 +30,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/enflasyonum_test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/enflasyonum_test
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -80,7 +80,7 @@ jobs:
           python-version: '3.13'
       - name: Verify expected parent and apply focused changes
         env:
-          EXPECTED_PARENT: 3a5e11e91c3347dcc9e5aa95f7e32a267ca6d087
+          EXPECTED_PARENT: 79b8b05a7b24d49f5952c82ce21475db20187319
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
