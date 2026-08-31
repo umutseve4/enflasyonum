@@ -16,4 +16,8 @@ def test_health_returns_200_and_ok():
 
 def test_unknown_route_returns_404():
     resp = client.get("/does-not-exist")
-    assert resp.status_code == 404
+    assert resp.status_code == 401
+    assert resp.headers["www-authenticate"] == "Basic"
+    assert resp.headers["cache-control"] == "no-store"
+    assert resp.headers["pragma"] == "no-cache"
+    assert "authorization" in resp.headers["vary"].lower()

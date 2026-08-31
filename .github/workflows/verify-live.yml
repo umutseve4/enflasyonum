@@ -1,10 +1,5 @@
 name: verify-live
 
-# Canlı doğrulama deseni: bu dosya main'e push edilince koşar, canlı URL'yi yoklar,
-# kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
-# v0.7.1 retry: ilk merge koşusu başarısız oldu; kök neden bilinmediğinden aynı kapı yeniden çalıştırılır.
-# NOT: /export.csv ve /usage-progress kişisel veri yüzeyleridir; yanıt gövdeleri
-# ASLA kanıta yazılmaz. Yalnız güvenli metadata ve kontrat boolean'ları kaydedilir.
 on:
   push:
     branches: [main]
@@ -21,91 +16,98 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Canlı uçları yokla (Render free uykudan uyanabilir, retry'lı)
+      - name: Validate live privacy contract
         run: |
           set -u
           mkdir -p artifacts
           OUT=artifacts/live-history-verify.txt
           BASE="https://enflasyonum-7gcn.onrender.com"
-          echo "verify-live koşusu: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
           FAIL=0
-          for P in /health /history.svg /card.svg /export.csv /usage-progress; do
+          echo "verify-live run: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
+
+          check_private() {
+            METHOD="$1"
+            PATHNAME="$2"
             CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" --max-time 180 \
-                   --retry 6 --retry-delay 20 --retry-all-errors "$BASE$P" || echo "000")
-            SIZE=$(wc -c < /tmp/resp | tr -d ' ')
-            echo "" >> "$OUT"
-            echo "== $P -> HTTP $CODE, $SIZE bytes ==" >> "$OUT"
-            if [ "$P" = "/history.svg" ] || [ "$P" = "/card.svg" ]; then
-              if [ "$CODE" = "200" ] && grep -q "<svg" /tmp/resp; then
-                echo "SVG kök etiketi bulundu: PASS" >> "$OUT"
-              else
-                echo "SVG doğrulaması: FAIL" >> "$OUT"; FAIL=1
-              fi
-              head -c 500 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
-            elif [ "$P" = "/export.csv" ]; then
-              HEXHEAD=$(head -c 3 /tmp/resp | od -An -tx1 | tr -d ' \n')
-              FIRSTLINE=$(head -c 60 /tmp/resp | tail -c +4 | head -n 1 | tr -d '\r')
-              CT_OK=0; grep -qi "^content-type: *text/csv" /tmp/hdr && CT_OK=1
-              HDR_OK=0; [ "$FIRSTLINE" = "tarih,kategori,aciklama,tutar" ] && HDR_OK=1
-              echo "hexhead=$HEXHEAD content_type_ok=$CT_OK header_ok=$HDR_OK" >> "$OUT"
-              if [ "$CODE" = "200" ] && [ "$HEXHEAD" = "efbbbf" ] && [ "$CT_OK" = "1" ] && [ "$HDR_OK" = "1" ]; then
-                echo "CSV doğrulaması (BOM + tam başlık + content-type): PASS" >> "$OUT"
-              else
-                echo "CSV doğrulaması: FAIL" >> "$OUT"; FAIL=1
-              fi
-            elif [ "$P" = "/usage-progress" ]; then
-              if [ "$CODE" = "200" ] && python - <<'PY'
-          import json
-          from pathlib import Path
-
-          value = json.loads(Path("/tmp/resp").read_text())
-          assert set(value) == {
-              "distinct_days", "target_days", "remaining_days", "complete"
+                   --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" || echo "000")
+            CC=0; PR=0; VA=0; WA=0
+            grep -qi "^cache-control: *no-store" /tmp/hdr && CC=1
+            grep -qi "^pragma: *no-cache" /tmp/hdr && PR=1
+            grep -qi "^vary:.*authorization" /tmp/hdr && VA=1
+            grep -qi "^www-authenticate: *Basic" /tmp/hdr && WA=1
+            echo "path=$PATHNAME method=$METHOD status=$CODE cache_no_store=$CC pragma_no_cache=$PR vary_auth=$VA www_auth_basic=$WA" >> "$OUT"
+            [ "$CODE" = "401" ] || FAIL=1
+            [ "$CC" = "1" ] || FAIL=1
+            [ "$PR" = "1" ] || FAIL=1
+            [ "$VA" = "1" ] || FAIL=1
+            [ "$WA" = "1" ] || FAIL=1
           }
-          assert type(value["distinct_days"]) is int
-          assert value["target_days"] == 14
-          assert type(value["remaining_days"]) is int
-          assert value["remaining_days"] >= 0
-          assert type(value["complete"]) is bool
-          PY
-              then
-                echo "Usage progress kontratı (alanlar + türler + hedef + clamp): PASS" >> "$OUT"
-              else
-                echo "Usage progress kontratı: FAIL" >> "$OUT"; FAIL=1
-              fi
-            elif [ "$P" = "/health" ]; then
+
+          check_public() {
+            PATHNAME="$1"
+            METHOD="$2"
+            CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" --max-time 180 \
+                   --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" || echo "000")
+            SAFE=0
+            if [ "$PATHNAME" = "/health" ] && [ "$METHOD" = "GET" ]; then
               if [ "$CODE" = "200" ] && python - <<'PY'
           import json
           from pathlib import Path
 
           value = json.loads(Path("/tmp/resp").read_text())
-          assert value.get("status") == "ok"
-          assert value.get("version") == "0.7.1"
+          assert set(value) == {"status", "version"}
+          assert value["status"] == "ok"
+          assert isinstance(value["version"], str)
           PY
-              then
-                echo "Health kontratı (status=ok + version=0.7.1): PASS" >> "$OUT"
-              else
-                echo "Health kontratı: FAIL" >> "$OUT"; FAIL=1
-              fi
-            else
-              [ "$CODE" = "200" ] || FAIL=1
+              then SAFE=1; fi
+            elif [ "$PATHNAME" = "/usage-progress" ] && [ "$METHOD" = "GET" ]; then
+              if [ "$CODE" = "200" ] && python - <<'PY'
+          import json
+          from pathlib import Path
+
+          value = json.loads(Path("/tmp/resp").read_text())
+          assert set(value) == {"distinct_days", "target_days", "remaining_days", "complete"}
+          assert isinstance(value["distinct_days"], int)
+          assert value["target_days"] == 14
+          assert isinstance(value["remaining_days"], int)
+          assert value["remaining_days"] >= 0
+          assert isinstance(value["complete"], bool)
+          PY
+              then SAFE=1; fi
+            elif [ "$METHOD" = "HEAD" ] && [ "$CODE" = "200" ]; then
+              SAFE=1
             fi
-          done
-          echo "" >> "$OUT"
-          echo "===== OTOMATIK KONTROL =====" >> "$OUT"
+            echo "path=$PATHNAME method=$METHOD status=$CODE public_contract_ok=$SAFE" >> "$OUT"
+            [ "$SAFE" = "1" ] || FAIL=1
+          }
+
+          check_public /health GET
+          check_public /health HEAD
+          check_public /usage-progress GET
+          check_public /usage-progress HEAD
+
+          check_private GET /
+          check_private GET /card.svg
+          check_private GET /history.svg
+          check_private GET /export.csv
+          check_private POST /expenses
+          check_private GET /docs
+          check_private GET /redoc
+          check_private GET /openapi.json
+
           if [ "$FAIL" = "0" ]; then
-            echo "SONUC: PASS" >> "$OUT"
+            echo "result=PASS" >> "$OUT"
           else
-            echo "SONUC: FAIL" >> "$OUT"
+            echo "result=FAIL" >> "$OUT"
           fi
           cat "$OUT"
           exit "$FAIL"
 
-      - name: Kanıtı commit'le
+      - name: Commit evidence
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/live-history-verify.txt
-          git commit -m "chore: canlı doğrulama kanıtı (history+card+export+usage) [skip ci]" || echo "değişiklik yok"
+          git commit -m "chore: canlı gizlilik doğrulama kanıtı [skip ci]" || echo "no changes"
           git pull --rebase origin main
           git push origin main

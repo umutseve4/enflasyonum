@@ -87,7 +87,7 @@ def test_weights_period_separates_basket_from_window(session):
 # ---------------------------------------------------------------------------
 
 
-def test_comparison_shows_two_numbers(session, client):
+def test_comparison_shows_two_numbers(session, client, owner_auth_headers):
     """Yıllık pencere 2025-08 -> 2026-08: 100 -> 138.5 = %38.50.
 
     M1'de kişisel endeks manşete düştüğü için iki sayı da %38.50 olmalı;
@@ -112,14 +112,14 @@ def test_comparison_shows_two_numbers(session, client):
         spent_at=date(2026, 8, 16),
     )
 
-    page = client.get("/").text
+    page = client.get("/", headers=owner_auth_headers).text
     assert "Senin enflasyonun" in page
     assert "Resmi TÜFE" in page
     assert page.count("38.50") >= 2
     assert "2025-08" in page and "2026-08" in page
 
 
-def test_comparison_weight_breakdown_visible(session, client):
+def test_comparison_weight_breakdown_visible(session, client, owner_auth_headers):
     """'Bu sayı nereden geldi?' dökümü: kategori payları görünür."""
     crud.upsert_official_cpi(session, period=date(2025, 8, 1), index_value=Decimal("100"))
     crud.upsert_official_cpi(session, period=date(2026, 8, 1), index_value=Decimal("110"))
@@ -138,7 +138,7 @@ def test_comparison_weight_breakdown_visible(session, client):
         spent_at=date(2026, 8, 16),
     )
 
-    page = client.get("/").text
+    page = client.get("/", headers=owner_auth_headers).text
     assert "Bu sayı nereden geldi?" in page
     assert "%60.00" in page  # gıda payı 600/1000
     assert "%40.00" in page  # ulaşım payı 400/1000
@@ -149,7 +149,7 @@ def test_comparison_weight_breakdown_visible(session, client):
 # ---------------------------------------------------------------------------
 
 
-def test_hint_when_no_cpi(session, client):
+def test_hint_when_no_cpi(session, client, owner_auth_headers):
     crud.add_expense(
         session,
         category_name="gıda",
@@ -157,19 +157,19 @@ def test_hint_when_no_cpi(session, client):
         amount=Decimal("100.00"),
         spent_at=date(2026, 8, 15),
     )
-    r = client.get("/")
+    r = client.get("/", headers=owner_auth_headers)
     assert r.status_code == 200
     assert "Resmi TÜFE verisi yok" in r.text
 
 
-def test_hint_when_no_expenses(session, client):
+def test_hint_when_no_expenses(session, client, owner_auth_headers):
     crud.upsert_official_cpi(session, period=date(2026, 8, 1), index_value=Decimal("138.5"))
-    r = client.get("/")
+    r = client.get("/", headers=owner_auth_headers)
     assert r.status_code == 200
     assert "en az bir harcama gir" in r.text
 
 
-def test_hint_when_base_period_missing(session, client):
+def test_hint_when_base_period_missing(session, client, owner_auth_headers):
     """Sadece güncel dönem var, 12 ay öncesi yok -> hesap ipucuyla düşer."""
     crud.upsert_official_cpi(session, period=date(2026, 8, 1), index_value=Decimal("138.5"))
     crud.add_expense(
@@ -179,7 +179,7 @@ def test_hint_when_base_period_missing(session, client):
         amount=Decimal("100.00"),
         spent_at=date(2026, 8, 15),
     )
-    r = client.get("/")
+    r = client.get("/", headers=owner_auth_headers)
     assert r.status_code == 200
     assert "Kıyas hesaplanamadı" in r.text
     assert "2025-08" in r.text
@@ -190,7 +190,7 @@ def test_hint_when_base_period_missing(session, client):
 # ---------------------------------------------------------------------------
 
 
-def test_category_subindices_diverge_from_headline(session, client):
+def test_category_subindices_diverge_from_headline(session, client, owner_auth_headers):
     """Kozmetik %50, gıda %20 enflasyonla kişisel = %47.50 ≠ resmi %31.75.
 
     Hesap: sepet kozmetik 550 + gıda 50 = 600 TL;
@@ -227,14 +227,14 @@ def test_category_subindices_diverge_from_headline(session, client):
         spent_at=date(2026, 8, 16),
     )
 
-    page = client.get("/").text
+    page = client.get("/", headers=owner_auth_headers).text
     assert "%47.50" in page  # kişisel — artık resmiden farklı
     assert "%31.75" in page  # resmi manşet
     assert "%50.00" in page  # kozmetik kendi alt endeksi
     assert "%20.00" in page  # gıda kendi alt endeksi
 
 
-def test_unmatched_category_marked_with_star(session, client):
+def test_unmatched_category_marked_with_star(session, client, owner_auth_headers):
     """Eşleşmeyen kategori manşete düşer ve * ile işaretlenir."""
     crud.upsert_official_cpi(session, period=date(2025, 8, 1), index_value=Decimal("100"))
     crud.upsert_official_cpi(session, period=date(2026, 8, 1), index_value=Decimal("110"))
@@ -246,5 +246,5 @@ def test_unmatched_category_marked_with_star(session, client):
         spent_at=date(2026, 8, 15),
     )
 
-    page = client.get("/").text
+    page = client.get("/", headers=owner_auth_headers).text
     assert "%10.00*" in page

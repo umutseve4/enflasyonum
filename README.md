@@ -9,7 +9,9 @@ endekslerle (TÜİK TÜFE) kıyaslamanı sağlar.
 
 ## Canlı demo
 
-🔗 **Demo:** https://enflasyonum-7gcn.onrender.com — [/health](https://enflasyonum-7gcn.onrender.com/health) · [/card.svg](https://enflasyonum-7gcn.onrender.com/card.svg) · [/history.svg](https://enflasyonum-7gcn.onrender.com/history.svg) · [/export.csv](https://enflasyonum-7gcn.onrender.com/export.csv)
+🔗 **Demo:** https://enflasyonum-7gcn.onrender.com — yalnız public uçlar:
+[/health](https://enflasyonum-7gcn.onrender.com/health) ·
+[/usage-progress](https://enflasyonum-7gcn.onrender.com/usage-progress)
 
 > Not: Render free tier 15 dk hareketsizlikte uyur; ilk istek ~30-60 sn sürebilir.
 > Canlı servis her hafta [verify-live](.github/workflows/verify-live.yml) workflow'u ile otomatik doğrulanır.
@@ -87,6 +89,18 @@ yönetim paneli, tahmin/ML.
 
 Python 3.11+, FastAPI, PostgreSQL, pytest, ruff, GitHub Actions CI
 (test + lint + canlı smoke).
+
+## Gizlilik ve erişim sınırı
+
+- **Public allowlist (yalnız bunlar):** `GET/HEAD /health` ve
+  `GET/HEAD /usage-progress`
+- **Diğer tüm uçlar owner-private:** `/`, `/card.svg`, `/history.svg`,
+  `/export.csv`, `POST /expenses`, `/docs`, `/redoc`, `/openapi.json` ve
+  gelecekte eklenecek diğer yollar/metotlar
+- Deploy öncesi `ENFLASYONUM_OWNER_TOKEN` zorunludur; boş/missing ise private
+  istekler fail-closed (503) döner
+- Kullanıcı adı varsayılanı `owner`, gerekirse `ENFLASYONUM_OWNER_USERNAME`
+  ile değiştirilir
 
 ## Lisans
 
