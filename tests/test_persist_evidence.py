@@ -134,7 +134,7 @@ def test_newer_projection_wins_and_each_run_has_a_ref(tmp_path):
     assert latest(repo)["run_id"] == 200
     assert remote_show(repo, "artifacts/live.txt") == "newer\n"
     refs = run(
-        "git", "ls-remote", "--heads", "origin", "refs/heads/evidence/\\*", cwd=repo
+        "git", "ls-remote", "--heads", "origin", "refs/heads/evidence/*", cwd=repo
     ).stdout
     assert "refs/heads/evidence/live-ingest/200-1" in refs
     assert "refs/heads/evidence/live-ingest/100-1" in refs
