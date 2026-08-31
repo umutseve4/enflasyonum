@@ -99,10 +99,8 @@ def remote_show(repo, path, ref="origin/main"):
 
 def mutate_main(repo: Path, mutate):
     run("git", "fetch", "origin", "main", cwd=repo)
-    # Projection persistence leaves an ignored payload in the fixture clone.
-    # Clean only this disposable test repository before checking out remote main.
-    run("git", "clean", "-fdx", cwd=repo)
-    run("git", "checkout", "-B", "mutation", "origin/main", cwd=repo)
+    # This repository is a disposable fixture; reset it to the fetched remote.
+    run("git", "checkout", "-f", "-B", "mutation", "origin/main", cwd=repo)
     mutate(repo)
     run("git", "add", "-A", cwd=repo)
     run("git", "commit", "-m", "test: mutate remote state", cwd=repo)
