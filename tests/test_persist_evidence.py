@@ -277,7 +277,7 @@ def test_non_fast_forward_is_retried(tmp_path):
     marker = tmp_path / "failed-once"
     log = tmp_path / "pushes"
     body = f"""
-if [[ "$1" == "push" && "$*" == *"HEAD:main"* ]]; then
+if [[ "$1" == "push" && "$*" == *":refs/heads/main"* ]]; then
   echo push >> {json.dumps(str(log))}
   if [[ ! -f {json.dumps(str(marker))} ]]; then
     touch {json.dumps(str(marker))}
@@ -299,7 +299,7 @@ def test_immutable_ref_is_reverified_after_projection_push_failure(tmp_path):
     remote = run("git", "remote", "get-url", "origin", cwd=repo).stdout.strip()
     marker = tmp_path / "corrupted-once"
     body = f"""
-if [[ "$1" == "push" && "$*" == *"HEAD:main"* && ! -f {json.dumps(str(marker))} ]]; then
+if [[ "$1" == "push" && "$*" == *":refs/heads/main"* && ! -f {json.dumps(str(marker))} ]]; then
   touch {json.dumps(str(marker))}
   "$REAL_GIT" --git-dir={json.dumps(remote)} update-ref \\
     refs/heads/evidence/live-ingest/750-1 refs/heads/main
@@ -368,7 +368,7 @@ def test_post_push_newer_projection_is_verified_as_superseding(tmp_path):
     advance_script.chmod(0o755)
     marker = tmp_path / "advanced"
     body = f"""
-if [[ "$1" == "push" && "$*" == *"HEAD:main"* ]]; then
+if [[ "$1" == "push" && "$*" == *":refs/heads/main"* ]]; then
   "$REAL_GIT" "$@"
   status=$?
   if [[ "$status" -eq 0 && ! -f {json.dumps(str(marker))} ]]; then
@@ -398,7 +398,7 @@ def test_retry_exhaustion_keeps_immutable_ref(tmp_path):
     real_git = shutil.which("git")
     log = tmp_path / "pushes"
     body = f"""
-if [[ "$1" == "push" && "$*" == *"HEAD:main"* ]]; then
+if [[ "$1" == "push" && "$*" == *":refs/heads/main"* ]]; then
   echo push >> {json.dumps(str(log))}
   exit 1
 fi
