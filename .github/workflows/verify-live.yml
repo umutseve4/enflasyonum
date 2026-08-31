@@ -28,13 +28,16 @@ jobs:
           check_private() {
             METHOD="$1"
             PATHNAME="$2"
-            CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" --max-time 180 \
+            HDR_FILE="$(mktemp)"
+            : > "$HDR_FILE"
+            CODE=$(curl -s -D "$HDR_FILE" -o /dev/null -w "%{http_code}" --max-time 180 \
                    --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" || echo "000")
             CC=0; PR=0; VA=0; WA=0
-            grep -qi "^cache-control: *no-store" /tmp/hdr && CC=1
-            grep -qi "^pragma: *no-cache" /tmp/hdr && PR=1
-            grep -qi "^vary:.*authorization" /tmp/hdr && VA=1
-            grep -qi "^www-authenticate: *Basic" /tmp/hdr && WA=1
+            grep -qi "^cache-control: *no-store" "$HDR_FILE" && CC=1
+            grep -qi "^pragma: *no-cache" "$HDR_FILE" && PR=1
+            grep -qi "^vary:.*authorization" "$HDR_FILE" && VA=1
+            grep -qi "^www-authenticate: *Basic" "$HDR_FILE" && WA=1
+            rm -f "$HDR_FILE"
             echo "path=$PATHNAME method=$METHOD status=$CODE cache_no_store=$CC pragma_no_cache=$PR vary_auth=$VA www_auth_basic=$WA" >> "$OUT"
             [ "$CODE" = "401" ] || FAIL=1
             [ "$CC" = "1" ] || FAIL=1

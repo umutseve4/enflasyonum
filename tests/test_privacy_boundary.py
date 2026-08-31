@@ -52,11 +52,25 @@ def _assert_private_cache_headers(response):
 
 
 def test_missing_owner_token_fails_closed_with_503(client, monkeypatch):
+    canary = "private-canary-should-not-leak"
+    counters = {"factory": 0, "index": 0}
+
+    def _factory():
+        counters["factory"] += 1
+        raise AssertionError("DB factory should not be called")
+
+    def _index_context(*args, **kwargs):
+        counters["index"] += 1
+        return {"canary": canary}
+
+    monkeypatch.setattr("enflasyonum.main.create_session_factory", _factory)
+    monkeypatch.setattr("enflasyonum.main._index_context", _index_context)
     monkeypatch.setenv("ENFLASYONUM_OWNER_TOKEN", "   ")
     response = client.get("/")
     assert response.status_code == 503
     assert response.json() == {"detail": "Service unavailable"}
-    assert "ENFLASYONUM_OWNER_TOKEN" not in response.text
+    assert canary not in response.text
+    assert counters == {"factory": 0, "index": 0}
     _assert_private_cache_headers(response)
 
 
@@ -125,6 +139,24 @@ def test_unauthorized_requests_do_not_invoke_private_db_or_render_helpers(client
     response = client.get("/")
     assert response.status_code == 401
     assert counters == {"factory": 0, "index": 0}
+
+
+def test_authenticated_private_500_keeps_private_headers(
+    db_url, owner_auth_headers, monkeypatch
+):
+    canary = "private-error-canary"
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError(canary)
+
+    monkeypatch.setattr("enflasyonum.main._index_context", _boom)
+
+    with TestClient(app, raise_server_exceptions=False) as error_client:
+        response = error_client.get("/", headers=owner_auth_headers)
+
+    assert response.status_code == 500
+    assert canary not in response.text
+    _assert_private_cache_headers(response)
 
 
 def test_public_health_and_usage_progress_remain_unauthenticated(client):

@@ -118,9 +118,9 @@ def _is_owner_authenticated(request: Request, expected_username: str, expected_t
     if ":" not in decoded:
         return False
     username, token = decoded.split(":", 1)
-    return hmac.compare_digest(username, expected_username) and hmac.compare_digest(
-        token, expected_token
-    )
+    username_matches = hmac.compare_digest(username, expected_username)
+    token_matches = hmac.compare_digest(token, expected_token)
+    return username_matches and token_matches
 
 
 @app.middleware("http")
@@ -137,7 +137,14 @@ async def owner_auth_boundary(request: Request, call_next):
     if not _is_owner_authenticated(request, owner_username, owner_token):
         return _unauthorized_response()
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("Özel endpoint isteğinde beklenmeyen hata")
+        response = JSONResponse(
+            {"detail": "Internal Server Error"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     return _apply_private_headers(response)
 
 
