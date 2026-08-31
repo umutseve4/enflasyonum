@@ -7,11 +7,15 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -32,38 +36,52 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/enflasyonum_test
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
         run: pip install -e ".[dev]"
+      - name: Validate workflow and helper syntax
+        run: |
+          bash -n scripts/persist-evidence.sh
+          python -m py_compile scripts/evds-discovery.py
+          ruby -e 'require "yaml"; Dir[".github/workflows/*.{yml,yaml}"].each { |f| YAML.load_file(f) }'
       - name: Lint
-        run: ruff check src tests migrations
+        run: ruff check src tests migrations scripts/evds-discovery.py
       - name: Migration smoke (up + down + up)
+        shell: bash
         run: |
-          alembic upgrade head
-          alembic downgrade base
-          alembic upgrade head
-          alembic downgrade base
+          migration_log="$(mktemp)"
+          if ! {
+            alembic upgrade head
+            alembic downgrade base
+            alembic upgrade head
+            alembic downgrade base
+          } >"$migration_log" 2>&1; then
+            exception="$(tail -n 1 "$migration_log")"
+            echo "::error title=Migration smoke failed::$exception"
+            cat "$migration_log"
+            rm -f "$migration_log"
+            exit 1
+          fi
+          cat "$migration_log"
+          rm -f "$migration_log"
       - name: Test
-        run: pytest
-      - name: Debug report (on failure)
-        if: failure() && matrix.python-version == '3.12' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          {
-            echo "### CI hata raporu (python ${{ matrix.python-version }})"
-            echo '```'
-            echo "--- pip check ---"
-            pip check 2>&1 | head -20 || true
-            echo "--- ruff ---"
-            ruff check src tests migrations 2>&1 | head -80 || true
-            echo "--- alembic upgrade head ---"
-            alembic upgrade head 2>&1 | tail -30 || true
-            echo "--- pytest ---"
-            pytest -x -q 2>&1 | tail -80 || true
-            echo '```'
-          } > report.md
-          gh pr comment ${{ github.event.pull_request.number }} --body-file report.md
+          test_log="$(mktemp)"
+          if ! pytest --tb=short >"$test_log" 2>&1; then
+            failure="$(grep '^FAILED ' "$test_log" | head -n 1 || true)"
+            if [[ -z "$failure" ]]; then
+              failure="$(tail -n 1 "$test_log")"
+            fi
+            echo "::error title=Pytest failed::$failure"
+            cat "$test_log"
+            rm -f "$test_log"
+            exit 1
+          fi
+          cat "$test_log"
+          rm -f "$test_log"

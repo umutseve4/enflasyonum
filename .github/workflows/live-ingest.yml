@@ -1,27 +1,29 @@
 name: live-ingest
 
 # M1.4 canlı doğrulama: EVDS'den gerçek TÜFE çekimi.
-# Bu dosyanın main'e push'u tetikler; sonuç artifacts/live-ingest.txt olarak commit'lenir.
-# Yeniden tetikleme #2: TP.TUKFIY2025.GENEL serisine geçiş sonrası (beklenti: 24 dönem).
+# Her kabul edilen koşu önce immutable evidence ref'e, ardından latest projection olarak main'e yazılır.
+# TP.TUKFIY2025.GENEL serisine geçiş sonrası beklenti: 24 dönem.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/live-ingest.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   live:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
     env:
       DATABASE_URL: "sqlite:///live.db"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: refs/heads/main
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
 
@@ -35,11 +37,16 @@ jobs:
         env:
           EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
         run: |
+          set -euo pipefail
+          tmp1="$(mktemp)"
+          tmp2="$(mktemp)"
+          trap 'rm -f "$tmp1" "$tmp2"' EXIT
           set +e
-          python -m enflasyonum.ingest 24 > run1.txt 2>&1
+          python -m enflasyonum.ingest 24 > "$tmp1" 2>&1
           rc1=$?
-          python -m enflasyonum.ingest 24 > run2.txt 2>&1
+          python -m enflasyonum.ingest 24 > "$tmp2" 2>&1
           rc2=$?
+          set -e
           mkdir -p artifacts
           {
             echo "# Canlı EVDS ingest doğrulaması"
@@ -47,21 +54,19 @@ jobs:
             echo "exit codes: run1=$rc1 run2=$rc2"
             echo ""
             echo "--- KOSU 1 ---"
-            cat run1.txt
+            cat "$tmp1"
             echo ""
             echo "--- KOSU 2 (idempotency) ---"
-            cat run2.txt
+            cat "$tmp2"
           } > artifacts/live-ingest.txt
           if [ "$rc1" -ne 0 ] || [ "$rc2" -ne 0 ]; then
             echo "Canlı ingest başarısız: run1=$rc1 run2=$rc2" >&2
             exit 1
           fi
 
-      - name: Commit result
+      - name: Persist result
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/live-ingest.txt
-          git commit -m "ci: canlı ingest sonucu [skip ci]" || echo "no changes"
-          git pull --rebase origin main
-          git push
+          bash scripts/persist-evidence.sh \
+            live-ingest \
+            artifacts/live-ingest.txt \
+            "ci: canlı ingest sonucu"

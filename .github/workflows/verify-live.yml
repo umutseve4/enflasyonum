@@ -1,25 +1,26 @@
 name: verify-live
 
-# Canlı doğrulama deseni: bu dosya main'e push edilince koşar, canlı URL'yi yoklar,
-# kanıtı artifacts/live-history-verify.txt olarak bot commit'iyle repoya yazar.
-# v0.7.1 retry: ilk merge koşusu başarısız oldu; kök neden bilinmediğinden aynı kapı yeniden çalıştırılır.
-# NOT: /export.csv ve /usage-progress kişisel veri yüzeyleridir; yanıt gövdeleri
-# ASLA kanıta yazılmaz. Yalnız güvenli metadata ve kontrat boolean'ları kaydedilir.
+# Canlı doğrulama kontrollü workflow_dispatch ile koşar.
+# Her kabul edilen koşu önce immutable evidence ref'e, ardından latest projection olarak main'e yazılır.
+# /export.csv ve /usage-progress kişisel veri yüzeyleridir; yanıt gövdeleri
+# ASLA kanıta yazılmaz. SVG yanıt gövdeleri de kalıcı kanıta yazılmaz.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/verify-live.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: refs/heads/main
 
       - name: Canlı uçları yokla (Render free uykudan uyanabilir, retry'lı)
         run: |
@@ -41,7 +42,6 @@ jobs:
               else
                 echo "SVG doğrulaması: FAIL" >> "$OUT"; FAIL=1
               fi
-              head -c 500 /tmp/resp >> "$OUT"; echo "" >> "$OUT"
             elif [ "$P" = "/export.csv" ]; then
               HEXHEAD=$(head -c 3 /tmp/resp | od -An -tx1 | tr -d ' \n')
               FIRSTLINE=$(head -c 60 /tmp/resp | tail -c +4 | head -n 1 | tr -d '\r')
@@ -87,13 +87,11 @@ jobs:
               else
                 echo "Health kontratı: FAIL" >> "$OUT"; FAIL=1
               fi
-            else
-              [ "$CODE" = "200" ] || FAIL=1
             fi
           done
           echo "" >> "$OUT"
           echo "===== OTOMATIK KONTROL =====" >> "$OUT"
-          if [ "$FAIL" = "0" ]; then
+          if [ "$FAIL" -eq 0 ]; then
             echo "SONUC: PASS" >> "$OUT"
           else
             echo "SONUC: FAIL" >> "$OUT"
@@ -101,11 +99,9 @@ jobs:
           cat "$OUT"
           exit "$FAIL"
 
-      - name: Kanıtı commit'le
+      - name: Persist result
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/live-history-verify.txt
-          git commit -m "chore: canlı doğrulama kanıtı (history+card+export+usage) [skip ci]" || echo "değişiklik yok"
-          git pull --rebase origin main
-          git push origin main
+          bash scripts/persist-evidence.sh \
+            verify-live \
+            artifacts/live-history-verify.txt \
+            "ci: verify live history and export"
