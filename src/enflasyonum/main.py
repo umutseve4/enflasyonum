@@ -121,7 +121,7 @@ def _is_owner_authenticated(request: Request, expected_username: str, expected_t
     # Evaluate both credential components independently before combining the result.
     username_matches = hmac.compare_digest(username, expected_username)
     token_matches = hmac.compare_digest(token, expected_token)
-    return username_matches and token_matches
+    return username_matches & token_matches
 
 
 @app.middleware("http")
@@ -134,7 +134,9 @@ async def owner_auth_boundary(request: Request, call_next):
     if not owner_token:
         return _service_unavailable_response()
 
-    owner_username = os.getenv("ENFLASYONUM_OWNER_USERNAME", "owner") or "owner"
+    owner_username = (
+    os.getenv("ENFLASYONUM_OWNER_USERNAME", "owner").strip() or "owner"
+)
     if not _is_owner_authenticated(request, owner_username, owner_token):
         return _unauthorized_response()
 

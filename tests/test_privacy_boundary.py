@@ -2,6 +2,7 @@ import base64
 import os
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from alembic import command
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
+import enflasyonum.main as main_module
 from enflasyonum import __version__, crud
 from enflasyonum.main import PUBLIC_ALLOWLIST, app
 from enflasyonum.models import Expense
@@ -88,11 +90,53 @@ def test_invalid_credentials_returns_401(client):
     _assert_private_cache_headers(response)
 
 
-@pytest.mark.parametrize("authorization", ["Basic !!!", "Basic", "******"])
+@pytest.mark.parametrize(
+    "authorization",
+    [
+        "Basic !!!",
+        "Basic /w==",
+        "Basic b3duZXI=",
+        "Basic",
+        "Bearer dGVzdA==",
+    ],
+)
 def test_malformed_authorization_returns_401(client, authorization):
     response = client.get("/", headers={"Authorization": authorization})
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Basic"
+    _assert_private_cache_headers(response)
+
+
+def test_both_credential_comparisons_execute_when_username_is_wrong(client, monkeypatch):
+    calls = []
+    real_compare_digest = __import__("hmac").compare_digest
+
+    def compare_digest(left, right):
+        calls.append((left, right))
+        return real_compare_digest(left, right)
+
+    monkeypatch.setattr(
+        main_module, "hmac", SimpleNamespace(compare_digest=compare_digest)
+    )
+    token = os.environ["ENFLASYONUM_OWNER_TOKEN"]
+    response = client.get("/", headers=_auth_header("wrong-owner", token))
+
+    assert response.status_code == 401
+    assert calls == [("wrong-owner", "owner"), (token, token)]
+
+
+@pytest.mark.parametrize(
+    ("configured_username", "request_username"),
+    [("   ", "owner"), ("  custom-owner  ", "custom-owner")],
+)
+def test_owner_username_is_trimmed_and_blank_falls_back_to_owner(
+    client, monkeypatch, configured_username, request_username
+):
+    monkeypatch.setenv("ENFLASYONUM_OWNER_USERNAME", configured_username)
+    token = os.environ["ENFLASYONUM_OWNER_TOKEN"]
+    response = client.get("/", headers=_auth_header(request_username, token))
+
+    assert response.status_code == 200
     _assert_private_cache_headers(response)
 
 
