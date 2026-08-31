@@ -1,9 +1,9 @@
 name: One-time owner auth edge hardening
 
 on:
-  push:
+  pull_request:
     branches:
-      - copilot/emergency-privacy-hotfix
+      - main
     paths:
       - .github/workflows/edge-hardening-once.yml
 
@@ -23,7 +23,7 @@ jobs:
           python-version: '3.13'
       - name: Verify expected parent and apply focused changes
         env:
-          EXPECTED_PARENT: 47c9325c32d27acde15eb6c903c69f9a099b8ca1
+          EXPECTED_PARENT: 71a55d471e37941004d75e6c200921becd132f3b
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
