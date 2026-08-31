@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   harden:
@@ -23,7 +24,7 @@ jobs:
           python-version: '3.13'
       - name: Verify expected parent and apply focused changes
         env:
-          EXPECTED_PARENT: 37530df883ccc0fbd88d7c8ea3421e7a3caf1a79
+          EXPECTED_PARENT: a3f9cde72d9dcedb47a66563ffc751b977f97aa7
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
@@ -60,14 +61,21 @@ jobs:
       - name: Ruff
         run: ruff check src tests migrations
       - name: Focused privacy tests
+        id: focused
+        continue-on-error: true
+        run: pytest tests/test_privacy_boundary.py 2>&1 | tee /tmp/focused.log
+      - name: Report focused failure on PR
+        if: steps.focused.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -o pipefail
-          pytest tests/test_privacy_boundary.py 2>&1 | tee /tmp/focused.log || {
-            printf '## Focused privacy test failure\n```text\n' >> "$GITHUB_STEP_SUMMARY"
-            tail -n 100 /tmp/focused.log >> "$GITHUB_STEP_SUMMARY"
-            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          }
+          {
+            printf 'One-time hardening focused test failure at `%s`:\n\n```text\n' "$GITHUB_SHA"
+            tail -n 100 /tmp/focused.log
+            printf '\n```\n'
+          } > /tmp/comment.md
+          gh pr comment 30 --body-file /tmp/comment.md
+          exit 1
       - name: Full tests
         run: pytest
       - name: Commit only final source and tests; remove one-time workflow
