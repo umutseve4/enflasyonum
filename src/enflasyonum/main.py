@@ -118,6 +118,7 @@ def _is_owner_authenticated(request: Request, expected_username: str, expected_t
     if ":" not in decoded:
         return False
     username, token = decoded.split(":", 1)
+    # Evaluate both credential components independently before combining the result.
     username_matches = hmac.compare_digest(username, expected_username)
     token_matches = hmac.compare_digest(token, expected_token)
     return username_matches and token_matches
