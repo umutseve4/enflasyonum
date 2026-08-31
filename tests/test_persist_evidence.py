@@ -98,13 +98,15 @@ def remote_show(repo, path, ref="origin/main"):
 
 
 def mutate_main(repo: Path, mutate):
-    run("git", "fetch", "origin", "main", cwd=repo)
-    # This repository is a disposable fixture; reset it to the fetched remote.
-    run("git", "checkout", "-f", "-B", "mutation", "origin/main", cwd=repo)
-    mutate(repo)
-    run("git", "add", "-A", cwd=repo)
-    run("git", "commit", "-m", "test: mutate remote state", cwd=repo)
-    run("git", "push", "origin", "HEAD:main", cwd=repo)
+    remote = run("git", "remote", "get-url", "origin", cwd=repo).stdout.strip()
+    mutation_repo = repo.parent / "mutation-repo"
+    run("git", "clone", "--branch", "main", remote, str(mutation_repo), cwd=repo.parent)
+    run("git", "config", "user.name", "test", cwd=mutation_repo)
+    run("git", "config", "user.email", "test@example.com", cwd=mutation_repo)
+    mutate(mutation_repo)
+    run("git", "add", "-A", cwd=mutation_repo)
+    run("git", "commit", "-m", "test: mutate remote state", cwd=mutation_repo)
+    run("git", "push", "origin", "HEAD:main", cwd=mutation_repo)
 
 
 def write_git_wrapper(tmp_path, real_git, body):
