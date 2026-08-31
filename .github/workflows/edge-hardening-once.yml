@@ -1,0 +1,72 @@
+name: One-time owner auth edge hardening
+
+on:
+  push:
+    branches:
+      - copilot/emergency-privacy-hotfix
+    paths:
+      - .github/workflows/edge-hardening-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Verify expected parent and apply focused changes
+        env:
+          EXPECTED_PARENT: 0ef29f1bf57d300837d003d127970dbb68fd966f
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          python - <<'PY'
+          from pathlib import Path
+
+          main = Path('src/enflasyonum/main.py')
+          text = main.read_text()
+          old = '    return username_matches and token_matches\n'
+          new = '    return username_matches & token_matches\n'
+          assert text.count(old) == 1
+          text = text.replace(old, new)
+          old = '    owner_username = os.getenv("ENFLASYONUM_OWNER_USERNAME", "owner") or "owner"\n'
+          new = '    owner_username = os.getenv("ENFLASYONUM_OWNER_USERNAME", "owner").strip() or "owner"\n'
+          assert text.count(old) == 1
+          main.write_text(text)
+
+          tests = Path('tests/test_privacy_boundary.py')
+          text = tests.read_text()
+          old = '@pytest.mark.parametrize("authorization", ["Basic !!!", "Basic", "******"])\n'
+          new = '''@pytest.mark.parametrize(\n    "authorization",\n    [\n        "Basic !!!",\n        "Basic /w==",\n        "Basic b3duZXI=",\n        "Basic",\n        "Bearer dGVzdA==",\n    ],\n)\n'''
+          assert text.count(old) == 1
+          text = text.replace(old, new)
+          anchor = '''def test_invalid_credentials_returns_401(client):\n    response = client.get("/", headers=_auth_header("owner", "wrong-token"))\n    assert response.status_code == 401\n    assert response.headers["www-authenticate"] == "Basic"\n    _assert_private_cache_headers(response)\n\n\n'''
+          addition = anchor + '''def test_wrong_username_still_compares_token(client, monkeypatch):\n    calls = []\n    original_compare_digest = __import__("hmac").compare_digest\n\n    def recording_compare_digest(supplied, expected):\n        calls.append((supplied, expected))\n        return original_compare_digest(supplied, expected)\n\n    monkeypatch.setattr(\n        "enflasyonum.main.hmac.compare_digest", recording_compare_digest\n    )\n    response = client.get(\n        "/", headers=_auth_header("wrong-owner", "test-owner-token")\n    )\n\n    assert response.status_code == 401\n    assert calls == [\n        ("wrong-owner", "owner"),\n        ("test-owner-token", "test-owner-token"),\n    ]\n\n\ndef test_blank_owner_username_falls_back_to_owner(client, monkeypatch):\n    monkeypatch.setenv("ENFLASYONUM_OWNER_USERNAME", "   ")\n    response = client.get(\n        "/", headers=_auth_header("owner", "test-owner-token")\n    )\n    assert response.status_code == 200\n    _assert_private_cache_headers(response)\n\n\n'''
+          assert text.count(anchor) == 1
+          text = text.replace(anchor, addition)
+          tests.write_text(text)
+          PY
+      - name: Install and verify
+        run: |
+          python -m pip install -e '.[dev]'
+          ruff check src tests migrations
+          pytest
+      - name: Commit only final source and tests; remove one-time workflow
+        run: |
+          set -euo pipefail
+          git diff --name-only | sort > /tmp/changed
+          printf '%s\n' src/enflasyonum/main.py tests/test_privacy_boundary.py | sort > /tmp/expected
+          diff -u /tmp/expected /tmp/changed
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/enflasyonum/main.py tests/test_privacy_boundary.py
+          git rm .github/workflows/edge-hardening-once.yml
+          git commit -m 'test: harden owner auth edge cases'
+          git push origin HEAD:copilot/emergency-privacy-hotfix
