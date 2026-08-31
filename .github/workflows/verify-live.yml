@@ -3,8 +3,8 @@ name: verify-live
 on:
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/verify-live.yml"
+    paths-ignore:
+      - "artifacts/**"
   workflow_dispatch:
 
 permissions:
