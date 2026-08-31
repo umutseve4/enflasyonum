@@ -99,6 +99,9 @@ def remote_show(repo, path, ref="origin/main"):
 
 def mutate_main(repo: Path, mutate):
     run("git", "fetch", "origin", "main", cwd=repo)
+    # Projection persistence leaves its payload untracked in the fixture clone.
+    # Clean only this disposable test repository before checking out remote main.
+    run("git", "clean", "-fd", cwd=repo)
     run("git", "checkout", "-B", "mutation", "origin/main", cwd=repo)
     mutate(repo)
     run("git", "add", "-A", cwd=repo)
@@ -128,11 +131,10 @@ def test_newer_projection_wins_and_each_run_has_a_ref(tmp_path):
     repo = make_repo(tmp_path)
     persist(repo, 200, 1, "newer\n")
     persist(repo, 100, 1, "older\n")
-
     assert latest(repo)["run_id"] == 200
     assert remote_show(repo, "artifacts/live.txt") == "newer\n"
     refs = run(
-        "git", "ls-remote", "--heads", "origin", "refs/heads/evidence/*", cwd=repo
+        "git", "ls-remote", "--heads", "origin", "refs/heads/evidence/\\*", cwd=repo
     ).stdout
     assert "refs/heads/evidence/live-ingest/200-1" in refs
     assert "refs/heads/evidence/live-ingest/100-1" in refs
@@ -143,7 +145,6 @@ def test_run_attempt_breaks_ties(tmp_path):
     persist(repo, 500, 1, "attempt one\n")
     persist(repo, 500, 2, "attempt two\n")
     persist(repo, 500, 1, "attempt one\n")
-
     assert latest(repo)["run_id"] == 500
     assert latest(repo)["run_attempt"] == 2
     assert remote_show(repo, "artifacts/live.txt") == "attempt two\n"
@@ -265,7 +266,6 @@ def test_only_allowlisted_paths_reach_main(tmp_path):
     (repo / "README.md").write_text("must not persist\n", encoding="utf-8")
     (repo / "secret.txt").write_text("must not persist\n", encoding="utf-8")
     persist(repo, 600, 1, "evidence\n")
-
     assert remote_show(repo, "README.md") == "initial\n"
     missing = run("git", "show", "origin/main:secret.txt", cwd=repo, check=False)
     assert missing.returncode != 0
@@ -277,9 +277,9 @@ def test_non_fast_forward_is_retried(tmp_path):
     marker = tmp_path / "failed-once"
     log = tmp_path / "pushes"
     body = f"""
-if [[ "$1" == "push" && "$*" == *":refs/heads/main"* ]]; then
+if [[ "$1" == "push" && "$*" == *"HEAD:main"* ]]; then
   echo push >> {json.dumps(str(log))}
-  if [[ ! -e {json.dumps(str(marker))} ]]; then
+  if [[ ! -f {json.dumps(str(marker))} ]]; then
     touch {json.dumps(str(marker))}
     exit 1
   fi
@@ -299,9 +299,9 @@ def test_immutable_ref_is_reverified_after_projection_push_failure(tmp_path):
     remote = run("git", "remote", "get-url", "origin", cwd=repo).stdout.strip()
     marker = tmp_path / "corrupted-once"
     body = f"""
-if [[ "$1" == "push" && "$*" == *":refs/heads/main"* && ! -e {json.dumps(str(marker))} ]]; then
+if [[ "$1" == "push" && "$*" == *"HEAD:main"* && ! -f {json.dumps(str(marker))} ]]; then
   touch {json.dumps(str(marker))}
-  "$REAL_GIT" --git-dir={json.dumps(remote)} update-ref \
+  "$REAL_GIT" --git-dir={json.dumps(remote)} update-ref \\
     refs/heads/evidence/live-ingest/750-1 refs/heads/main
   exit 1
 fi
@@ -328,6 +328,7 @@ def test_post_push_newer_projection_is_verified_as_superseding(tmp_path):
     run("git", "clone", remote, str(advance), cwd=tmp_path)
     run("git", "config", "user.name", "racer", cwd=advance)
     run("git", "config", "user.email", "racer@example.com", cwd=advance)
+
     higher_payload = "higher concurrent run\n"
     higher_checksum = hashlib.sha256(higher_payload.encode()).hexdigest()
     higher_manifest = {
@@ -367,10 +368,10 @@ def test_post_push_newer_projection_is_verified_as_superseding(tmp_path):
     advance_script.chmod(0o755)
     marker = tmp_path / "advanced"
     body = f"""
-if [[ "$1" == "push" && "$*" == *":refs/heads/main"* && ! -e {json.dumps(str(marker))} ]]; then
+if [[ "$1" == "push" && "$*" == *"HEAD:main"* ]]; then
   "$REAL_GIT" "$@"
   status=$?
-  if [[ "$status" -eq 0 ]]; then
+  if [[ "$status" -eq 0 && ! -f {json.dumps(str(marker))} ]]; then
     touch {json.dumps(str(marker))}
     {json.dumps(str(advance_script))}
   fi
@@ -397,7 +398,7 @@ def test_retry_exhaustion_keeps_immutable_ref(tmp_path):
     real_git = shutil.which("git")
     log = tmp_path / "pushes"
     body = f"""
-if [[ "$1" == "push" && "$*" == *":refs/heads/main"* ]]; then
+if [[ "$1" == "push" && "$*" == *"HEAD:main"* ]]; then
   echo push >> {json.dumps(str(log))}
   exit 1
 fi
