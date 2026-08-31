@@ -135,9 +135,9 @@ def test_render_card_escapes_hint():
     assert "&lt;script&gt;&amp;" in svg
 
 
-def test_card_endpoint_fallback_sets_no_store(client):
+def test_card_endpoint_fallback_sets_no_store(client, owner_auth_headers):
     """Veri yokken de cache kapalı olmalı — bayat ipucu kartı kalmasın."""
-    r = client.get("/card.svg")
+    r = client.get("/card.svg", headers=owner_auth_headers)
     assert r.status_code == 200
     assert r.headers["cache-control"] == "no-store"
 
@@ -173,14 +173,14 @@ def test_render_card_own_series_row_has_no_star():
 # ---------------------------------------------------------------------------
 
 
-def test_card_endpoint_hint_when_empty_db(client):
-    r = client.get("/card.svg")
+def test_card_endpoint_hint_when_empty_db(client, owner_auth_headers):
+    r = client.get("/card.svg", headers=owner_auth_headers)
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("image/svg+xml")
     assert "Resmi TÜFE verisi yok" in r.text
 
 
-def test_card_endpoint_renders_comparison(session, client):
+def test_card_endpoint_renders_comparison(session, client, owner_auth_headers):
     """Ana sayfadaki senaryonun aynısı: 100 -> 138.5 = %38.50 iki tarafta."""
     crud.upsert_official_cpi(session, period=date(2025, 8, 1), index_value=Decimal("100"))
     crud.upsert_official_cpi(
@@ -194,7 +194,7 @@ def test_card_endpoint_renders_comparison(session, client):
         spent_at=date(2026, 8, 15),
     )
 
-    r = client.get("/card.svg")
+    r = client.get("/card.svg", headers=owner_auth_headers)
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("image/svg+xml")
     minidom.parseString(r.text)
@@ -203,7 +203,7 @@ def test_card_endpoint_renders_comparison(session, client):
     assert r.headers["cache-control"] == "no-store"
 
 
-def test_index_links_to_card(session, client):
+def test_index_links_to_card(session, client, owner_auth_headers):
     """Ana sayfada paylaşım linki, kıyas verisi varken görünür."""
     crud.upsert_official_cpi(session, period=date(2025, 8, 1), index_value=Decimal("100"))
     crud.upsert_official_cpi(session, period=date(2026, 8, 1), index_value=Decimal("110"))
@@ -214,5 +214,5 @@ def test_index_links_to_card(session, client):
         amount=Decimal("100.00"),
         spent_at=date(2026, 8, 15),
     )
-    page = client.get("/").text
+    page = client.get("/", headers=owner_auth_headers).text
     assert 'href="/card.svg"' in page

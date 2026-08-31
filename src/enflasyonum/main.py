@@ -14,13 +14,17 @@ GET /usage-progress -> M1 için yalnız aggregate kullanım günü ilerlemesi
 POST /expenses -> doğrula, kaydet, PRG (303) ile / adresine dön
 """
 
+import base64
+import binascii
+import hmac
 import logging
+import os
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import Depends, FastAPI, Form, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -57,6 +61,94 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 #: Ekranda yüzdeler 2 ondalıkla gösterilir; hesap 6 ondalıkla yapılır.
 TWO_DP = Decimal("0.01")
 USAGE_TARGET_DAYS = 14
+PUBLIC_ALLOWLIST = {
+    ("GET", "/health"),
+    ("HEAD", "/health"),
+    ("GET", "/usage-progress"),
+    ("HEAD", "/usage-progress"),
+}
+
+
+def _append_vary_authorization(vary_value: str | None) -> str:
+    if not vary_value:
+        return "Authorization"
+    parts = [part.strip() for part in vary_value.split(",") if part.strip()]
+    lowered = {part.lower() for part in parts}
+    if "authorization" not in lowered:
+        parts.append("Authorization")
+    return ", ".join(parts)
+
+
+def _apply_private_headers(response: Response) -> Response:
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Vary"] = _append_vary_authorization(response.headers.get("Vary"))
+    return response
+
+
+def _unauthorized_response() -> Response:
+    response = JSONResponse(
+        {"detail": "Unauthorized"}, status_code=status.HTTP_401_UNAUTHORIZED
+    )
+    response.headers["WWW-Authenticate"] = "Basic"
+    return _apply_private_headers(response)
+
+
+def _service_unavailable_response() -> Response:
+    response = JSONResponse(
+        {"detail": "Service unavailable"},
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+    return _apply_private_headers(response)
+
+
+def _is_owner_authenticated(request: Request, expected_username: str, expected_token: str) -> bool:
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        return False
+
+    scheme, _, encoded = authorization.partition(" ")
+    if scheme.lower() != "basic" or not encoded:
+        return False
+    try:
+        decoded = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return False
+
+    if ":" not in decoded:
+        return False
+    username, token = decoded.split(":", 1)
+    # Evaluate both credential components independently before combining the result.
+    username_matches = hmac.compare_digest(username, expected_username)
+    token_matches = hmac.compare_digest(token, expected_token)
+    return username_matches & token_matches
+
+
+@app.middleware("http")
+async def owner_auth_boundary(request: Request, call_next):
+    path_method = (request.method.upper(), request.url.path)
+    if path_method in PUBLIC_ALLOWLIST:
+        return await call_next(request)
+
+    owner_token = os.getenv("ENFLASYONUM_OWNER_TOKEN", "").strip()
+    if not owner_token:
+        return _service_unavailable_response()
+
+    owner_username = (
+    os.getenv("ENFLASYONUM_OWNER_USERNAME", "owner").strip() or "owner"
+)
+    if not _is_owner_authenticated(request, owner_username, owner_token):
+        return _unauthorized_response()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("Özel endpoint isteğinde beklenmeyen hata")
+        response = JSONResponse(
+            {"detail": "Internal Server Error"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    return _apply_private_headers(response)
 
 
 def get_session():
@@ -193,6 +285,11 @@ def health() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
 
 
+@app.head("/health", include_in_schema=False)
+def health_head() -> Response:
+    return Response(status_code=status.HTTP_200_OK)
+
+
 @app.get("/usage-progress")
 def usage_progress(session: Session = Depends(get_session)) -> dict[str, int | bool]:
     """M1'in 14 farklı kullanım günü kapısına aggregate ilerlemeyi döndür."""
@@ -206,6 +303,11 @@ def usage_progress(session: Session = Depends(get_session)) -> dict[str, int | b
         "remaining_days": remaining_days,
         "complete": distinct_days >= USAGE_TARGET_DAYS,
     }
+
+
+@app.head("/usage-progress", include_in_schema=False)
+def usage_progress_head() -> Response:
+    return Response(status_code=status.HTTP_200_OK)
 
 
 @app.get("/", response_class=HTMLResponse)

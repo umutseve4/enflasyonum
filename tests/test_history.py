@@ -163,15 +163,15 @@ def test_render_history_svg_contract_size_and_a11y():
 # ---------------------------------------------------------------------------
 
 
-def test_history_endpoint_hint_when_empty_db(client):
-    r = client.get("/history.svg")
+def test_history_endpoint_hint_when_empty_db(client, owner_auth_headers):
+    r = client.get("/history.svg", headers=owner_auth_headers)
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("image/svg+xml")
     assert r.headers["cache-control"] == "no-store"
     assert "Henüz harcama yok" in r.text
 
 
-def test_history_endpoint_renders_monthly_bars(session, client):
+def test_history_endpoint_renders_monthly_bars(session, client, owner_auth_headers):
     crud.add_expense(
         session,
         category_name="gıda",
@@ -193,7 +193,7 @@ def test_history_endpoint_renders_monthly_bars(session, client):
         amount=Decimal("10.00"),
         spent_at=date(2026, 8, 5),
     )
-    r = client.get("/history.svg")
+    r = client.get("/history.svg", headers=owner_auth_headers)
     assert r.status_code == 200
     minidom.parseString(r.text)
     assert r.text.count('class="bar"') == 2  # 2026-07 ve 2026-08
@@ -201,7 +201,7 @@ def test_history_endpoint_renders_monthly_bars(session, client):
     assert "50.00 TL" in r.text  # 40 + 10 ay içinde toplandı
 
 
-def test_history_endpoint_falls_back_on_db_error(client):
+def test_history_endpoint_falls_back_on_db_error(client, owner_auth_headers):
     """QA bulgusu (PR #12): DB hatasında 500 değil, 200 + hata kartı."""
 
     class BrokenSession:
@@ -210,7 +210,7 @@ def test_history_endpoint_falls_back_on_db_error(client):
 
     app.dependency_overrides[get_session] = lambda: BrokenSession()
     try:
-        r = client.get("/history.svg")
+        r = client.get("/history.svg", headers=owner_auth_headers)
     finally:
         app.dependency_overrides.pop(get_session, None)
     assert r.status_code == 200
@@ -220,11 +220,11 @@ def test_history_endpoint_falls_back_on_db_error(client):
     minidom.parseString(r.text)
 
 
-def test_index_embeds_history_chart(client):
-    page = client.get("/").text
+def test_index_embeds_history_chart(client, owner_auth_headers):
+    page = client.get("/", headers=owner_auth_headers).text
     assert 'src="/history.svg"' in page
 
 
-def test_index_links_history_in_new_tab(client):
-    page = client.get("/").text
+def test_index_links_history_in_new_tab(client, owner_auth_headers):
+    page = client.get("/", headers=owner_auth_headers).text
     assert '<a href="/history.svg" target="_blank"' in page

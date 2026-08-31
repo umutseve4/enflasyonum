@@ -19,14 +19,14 @@ def client(tmp_path, monkeypatch):
     command.downgrade(cfg, "base")
 
 
-def test_index_renders_form(client):
-    r = client.get("/")
+def test_index_renders_form(client, owner_auth_headers):
+    r = client.get("/", headers=owner_auth_headers)
     assert r.status_code == 200
     assert "Enflasyonumdan ne haber?" in r.text
     assert '<form method="post" action="/expenses"' in r.text
 
 
-def test_post_expense_then_listed(client):
+def test_post_expense_then_listed(client, owner_auth_headers):
     r = client.post(
         "/expenses",
         data={
@@ -36,17 +36,18 @@ def test_post_expense_then_listed(client):
             "spent_at": "2026-08-18",
         },
         follow_redirects=False,
+        headers=owner_auth_headers,
     )
     assert r.status_code == 303
     assert r.headers["location"] == "/"
 
-    page = client.get("/")
+    page = client.get("/", headers=owner_auth_headers)
     assert "süt" in page.text
     assert "gıda" in page.text
     assert "42.50" in page.text
 
 
-def test_post_expense_comma_decimal(client):
+def test_post_expense_comma_decimal(client, owner_auth_headers):
     r = client.post(
         "/expenses",
         data={
@@ -56,12 +57,13 @@ def test_post_expense_comma_decimal(client):
             "spent_at": "2026-08-18",
         },
         follow_redirects=False,
+        headers=owner_auth_headers,
     )
     assert r.status_code == 303
-    assert "15.75" in client.get("/").text
+    assert "15.75" in client.get("/", headers=owner_auth_headers).text
 
 
-def test_post_invalid_amount_rejected(client):
+def test_post_invalid_amount_rejected(client, owner_auth_headers):
     r = client.post(
         "/expenses",
         data={
@@ -70,12 +72,15 @@ def test_post_invalid_amount_rejected(client):
             "category": "test",
             "spent_at": "2026-08-18",
         },
+        headers=owner_auth_headers,
     )
     assert r.status_code == 422
-    assert "hata" not in client.get("/").text.replace("Tutar sayı değil", "")
+    assert "hata" not in client.get("/", headers=owner_auth_headers).text.replace(
+        "Tutar sayı değil", ""
+    )
 
 
-def test_post_negative_amount_rejected(client):
+def test_post_negative_amount_rejected(client, owner_auth_headers):
     r = client.post(
         "/expenses",
         data={
@@ -84,5 +89,6 @@ def test_post_negative_amount_rejected(client):
             "category": "test",
             "spent_at": "2026-08-18",
         },
+        headers=owner_auth_headers,
     )
     assert r.status_code == 422

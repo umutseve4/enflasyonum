@@ -87,8 +87,8 @@ def test_amount_and_date_not_defused():
 # --- HTTP sözleşmesi ---
 
 
-def test_export_empty_db_header_only(client):
-    r = client.get("/export.csv")
+def test_export_empty_db_header_only(client, owner_auth_headers):
+    r = client.get("/export.csv", headers=owner_auth_headers)
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     assert "attachment" in r.headers["content-disposition"]
@@ -97,13 +97,13 @@ def test_export_empty_db_header_only(client):
     assert r.text.lstrip("\ufeff") == "tarih,kategori,aciklama,tutar\r\n"
 
 
-def test_export_starts_with_utf8_bom(client):
+def test_export_starts_with_utf8_bom(client, owner_auth_headers):
     # Excel-TR, BOM'suz UTF-8 CSV'de Türkçe karakterleri bozuyor.
-    r = client.get("/export.csv")
+    r = client.get("/export.csv", headers=owner_auth_headers)
     assert r.content.startswith(b"\xef\xbb\xbf")
 
 
-def test_export_contains_posted_expense(client):
+def test_export_contains_posted_expense(client, owner_auth_headers):
     client.post(
         "/expenses",
         data={
@@ -113,12 +113,13 @@ def test_export_contains_posted_expense(client):
             "spent_at": "2026-08-18",
         },
         follow_redirects=False,
+        headers=owner_auth_headers,
     )
-    r = client.get("/export.csv")
+    r = client.get("/export.csv", headers=owner_auth_headers)
     assert "2026-08-18,gıda,süt,42.50" in r.text
 
 
-def test_export_rows_sorted_by_date(client):
+def test_export_rows_sorted_by_date(client, owner_auth_headers):
     for d, desc in [("2026-08-19", "ikinci"), ("2026-08-01", "ilk")]:
         client.post(
             "/expenses",
@@ -129,12 +130,13 @@ def test_export_rows_sorted_by_date(client):
                 "spent_at": d,
             },
             follow_redirects=False,
+            headers=owner_auth_headers,
         )
-    body = client.get("/export.csv").text
+    body = client.get("/export.csv", headers=owner_auth_headers).text
     assert body.index("ilk") < body.index("ikinci")
 
 
-def test_export_formula_description_defused_over_http(client):
+def test_export_formula_description_defused_over_http(client, owner_auth_headers):
     client.post(
         "/expenses",
         data={
@@ -144,13 +146,14 @@ def test_export_formula_description_defused_over_http(client):
             "spent_at": "2026-08-18",
         },
         follow_redirects=False,
+        headers=owner_auth_headers,
     )
-    r = client.get("/export.csv")
+    r = client.get("/export.csv", headers=owner_auth_headers)
     assert "'=2+5" in r.text
     assert ",=2+5," not in r.text
 
 
-def test_export_db_error_returns_header_only(client):
+def test_export_db_error_returns_header_only(client, owner_auth_headers):
     # Route sözleşmesi: DB hatasında bile 200 + BOM + yalnız başlık, asla 500.
     class _Boom:
         def execute(self, *args, **kwargs):
@@ -158,7 +161,7 @@ def test_export_db_error_returns_header_only(client):
 
     app.dependency_overrides[get_session] = lambda: _Boom()
     try:
-        r = client.get("/export.csv")
+        r = client.get("/export.csv", headers=owner_auth_headers)
     finally:
         app.dependency_overrides.clear()
     assert r.status_code == 200
