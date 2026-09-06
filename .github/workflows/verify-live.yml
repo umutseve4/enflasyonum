@@ -42,7 +42,7 @@ jobs:
           for i in $(seq 1 "$ATTEMPTS"); do
             CODE=$(curl -s -o /tmp/warm -w "%{http_code}" --max-time 90 "$BASE/health" || echo "000")
             [ -n "$FIRST_CODE" ] || FIRST_CODE="$CODE"
-            if [ "$CODE" = "200" ] && python - <<'PY'
+            if [ "$CODE" = "200" ] && python - 2>/dev/null <<'PY'
           import json
           from pathlib import Path
 
