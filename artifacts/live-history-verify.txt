@@ -1,19 +1,23 @@
-verify-live run: 2026-09-06T12:39:34Z
+verify-live run: 2026-09-06T13:03:54Z
 path=/health method=GET status=200 curl_rc=0 cf_cache="DYNAMIC" public_contract_ok=1
 path=/health method=HEAD status=200 curl_rc=0 cf_cache="DYNAMIC" public_contract_ok=1
 path=/usage-progress method=GET status=200 curl_rc=0 cf_cache="DYNAMIC" public_contract_ok=1
 path=/usage-progress method=HEAD status=200 curl_rc=0 cf_cache="DYNAMIC" public_contract_ok=1
-path=/ method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+path=/ method=GET status=503 curl_rc=0 hdr_bytes=678 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
   body_prefix="{"detail":"Service unavailable"}"
-path=/card.svg method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+path=/card.svg method=GET status=503 curl_rc=0 hdr_bytes=678 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
   body_prefix="{"detail":"Service unavailable"}"
-path=/history.svg method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+path=/history.svg method=GET status=503 curl_rc=0 hdr_bytes=678 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
   body_prefix="{"detail":"Service unavailable"}"
-path=/export.csv method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+path=/export.csv method=GET status=503 curl_rc=0 hdr_bytes=678 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
   body_prefix="{"detail":"Service unavailable"}"
-path=/expenses method=POST status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+path=/expenses method=POST status=503 curl_rc=0 hdr_bytes=678 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
   body_prefix="{"detail":"Service unavailable"}"
-path=/docs method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+path=/docs method=GET status=503 curl_rc=0 hdr_bytes=678 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
   body_prefix="{"detail":"Service unavailable"}"
-path=/redoc method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+path=/redoc method=GET status=503 curl_rc=0 hdr_bytes=678 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
   body_prefix="{"detail":"Service unavailable"}"
+path=/openapi.json method=GET status=503 curl_rc=0 hdr_bytes=678 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+  body_prefix="{"detail":"Service unavailable"}"
+health_before=200 health_after status=200 curl_rc=0 status_line="HTTP/2 200 "
+result=PASS-CLOSED unknown=0 closed=8
