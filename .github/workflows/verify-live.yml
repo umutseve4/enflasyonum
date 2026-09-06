@@ -79,32 +79,64 @@ jobs:
           FAIL=0
           echo "verify-live run: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
 
-          # status=000 yaninda ayristirilmis basliklarin gorunmesi imkansizdir:
-          # ya kod yakalama ya baslik yakalama yanlistir. Bu ikisini ayirt
-          # edebilmek icin curl'un cikis kodu ve baslik dosyasinin bayt sayisi
-          # da kayda gecer. Ayirt edemedigin seyi duzeltemezsin.
+          # Onceki kosu (07488dd0) su celiskiyi verdi: sekiz ozel yolun
+          # sekizinde de curl_rc=23 (yazma hatasi), hdr_bytes=339, stderr bos.
+          # Yani basliklar eksiksiz geldi, sonra aktarim oldu. Geriye iki
+          # okuma kaldi: HTTP/2 akisinin sunucu tarafindan sifirlanmasi, ya da
+          # uygulamanin yaniti gercekten yarida kesmesi. Bunlari ayirmanin tek
+          # yolu ayni istegi bir de --http1.1 ile sormak ve durum satirini
+          # kayda gecmektir.
+          #
+          # Baslik DEGERLERI degil yalnizca ADLARI ve durum satiri yazilir.
+          # Bu depo herkese acik; bir 401 yanitinin basliklarinda Set-Cookie
+          # gibi bir sey cikarsa onu isleyip yayinlamis oluruz.
+          probe() {
+            # $1 method, $2 path, $3 extra curl args, $4 header file
+            set +e
+            curl -s -S -D "$4" -o /dev/null -w "%{http_code}" --max-time 180 \
+                 --retry 6 --retry-delay 20 --retry-all-errors \
+                 $3 -X "$1" "$BASE$2" >/tmp/w.txt 2>/tmp/curl_err
+            PROBE_RC=$?
+            set -e
+            PROBE_CODE="$(cat /tmp/w.txt 2>/dev/null)"
+            [ -n "$PROBE_CODE" ] || PROBE_CODE="000"
+          }
+
           check_private() {
             METHOD="$1"
             PATHNAME="$2"
             HDR_FILE="$(mktemp)"
             : > "$HDR_FILE"
-            set +e
-            CODE=$(curl -s -S -D "$HDR_FILE" -o /dev/null -w "%{http_code}" --max-time 180 \
-                   --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" 2>/tmp/curl_err)
-            RC=$?
-            set -e
-            [ -n "$CODE" ] || CODE="000"
+            probe "$METHOD" "$PATHNAME" "" "$HDR_FILE"
+            CODE="$PROBE_CODE"
+            RC="$PROBE_RC"
             ERR="$(tr -d '\n' < /tmp/curl_err | cut -c1-160)"
             HDR_BYTES=$(wc -c < "$HDR_FILE" | tr -d ' ')
+            STATUS_LINE="$(head -n1 "$HDR_FILE" | tr -d '\r' | cut -c1-40)"
+            HDR_NAMES="$(grep -oiE '^[A-Za-z0-9-]+:' "$HDR_FILE" | tr -d ':' \
+                         | tr 'A-Z' 'a-z' | sort -u | paste -sd, -)"
             CC=0; PR=0; VA=0; WA=0
             grep -qi "^cache-control: *no-store" "$HDR_FILE" && CC=1
             grep -qi "^pragma: *no-cache" "$HDR_FILE" && PR=1
             grep -qi "^vary:.*authorization" "$HDR_FILE" && VA=1
             grep -qi "^www-authenticate: *Basic" "$HDR_FILE" && WA=1
             rm -f "$HDR_FILE"
-            echo "path=$PATHNAME method=$METHOD status=$CODE curl_rc=$RC hdr_bytes=$HDR_BYTES cache_no_store=$CC pragma_no_cache=$PR vary_auth=$VA www_auth_basic=$WA" >> "$OUT"
+            echo "path=$PATHNAME method=$METHOD status=$CODE curl_rc=$RC hdr_bytes=$HDR_BYTES status_line=\"$STATUS_LINE\" hdr_names=\"$HDR_NAMES\" cache_no_store=$CC pragma_no_cache=$PR vary_auth=$VA www_auth_basic=$WA" >> "$OUT"
+
             if [ "$CODE" = "000" ]; then
-              echo "::error title=Ozel yol yanitsiz::$METHOD $PATHNAME icin HTTP yaniti alinamadi (curl_rc=$RC, baslik $HDR_BYTES bayt). Hata: ${ERR:-yok}. Bu erisilebilirlik sorunudur, kontrat ihlali degildir."
+              # Ikinci sorgu: ayni istek, HTTP/1.1'e zorlanmis. Bu gecerse
+              # sorun uygulamada degil, HTTP/2 aktariminda demektir.
+              H2_FILE="$(mktemp)"
+              probe "$METHOD" "$PATHNAME" "--http1.1" "$H2_FILE"
+              H1_CODE="$PROBE_CODE"; H1_RC="$PROBE_RC"
+              H1_LINE="$(head -n1 "$H2_FILE" | tr -d '\r' | cut -c1-40)"
+              rm -f "$H2_FILE"
+              echo "  http11_retry path=$PATHNAME status=$H1_CODE curl_rc=$H1_RC status_line=\"$H1_LINE\"" >> "$OUT"
+              if [ "$H1_CODE" != "000" ]; then
+                echo "::error title=HTTP2 aktarim hatasi::$METHOD $PATHNAME varsayilan aktarimda curl_rc=$RC verdi ama --http1.1 ile HTTP $H1_CODE dondu. Uygulama saglikli; kusur HTTP/2 katmanindadir."
+              else
+                echo "::error title=Ozel yol yanitsiz::$METHOD $PATHNAME icin iki aktarimda da HTTP yaniti alinamadi (curl_rc=$RC / $H1_RC, baslik $HDR_BYTES bayt, durum satiri: ${STATUS_LINE:-yok}). Hata: ${ERR:-yok}."
+              fi
               FAIL=1
               return 0
             fi
