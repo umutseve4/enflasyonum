@@ -1,14 +1,22 @@
-verify-live run: 2026-09-06T12:08:40Z
+verify-live run: 2026-09-06T12:17:39Z
 path=/health method=GET status=200 curl_rc=0 public_contract_ok=1
 path=/health method=HEAD status=200 curl_rc=0 public_contract_ok=1
 path=/usage-progress method=GET status=200 curl_rc=0 public_contract_ok=1
 path=/usage-progress method=HEAD status=200 curl_rc=0 public_contract_ok=1
-path=/ method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/card.svg method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/history.svg method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/export.csv method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/expenses method=POST status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/docs method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/redoc method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/openapi.json method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/ method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+  http11_retry path=/ status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
+path=/card.svg method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+  http11_retry path=/card.svg status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
+path=/history.svg method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+  http11_retry path=/history.svg status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
+path=/export.csv method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+  http11_retry path=/export.csv status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
+path=/expenses method=POST status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+  http11_retry path=/expenses status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
+path=/docs method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+  http11_retry path=/docs status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
+path=/redoc method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+  http11_retry path=/redoc status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
+path=/openapi.json method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+  http11_retry path=/openapi.json status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
 result=FAIL
