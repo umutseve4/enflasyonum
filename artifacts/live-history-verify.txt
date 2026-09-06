@@ -1,23 +1,19 @@
-verify-live run: 2026-09-06T12:23:47Z
+verify-live run: 2026-09-06T12:39:34Z
 path=/health method=GET status=200 curl_rc=0 cf_cache="DYNAMIC" public_contract_ok=1
 path=/health method=HEAD status=200 curl_rc=0 cf_cache="DYNAMIC" public_contract_ok=1
 path=/usage-progress method=GET status=200 curl_rc=0 cf_cache="DYNAMIC" public_contract_ok=1
 path=/usage-progress method=HEAD status=200 curl_rc=0 cf_cache="DYNAMIC" public_contract_ok=1
-path=/ method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-  http11_retry path=/ status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
-path=/card.svg method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-  http11_retry path=/card.svg status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
-path=/history.svg method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-  http11_retry path=/history.svg status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
-path=/export.csv method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-  http11_retry path=/export.csv status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
-path=/expenses method=POST status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-  http11_retry path=/expenses status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
-path=/docs method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-  http11_retry path=/docs status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
-path=/redoc method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-  http11_retry path=/redoc status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
-path=/openapi.json method=GET status=000 curl_rc=23 hdr_bytes=339 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-  http11_retry path=/openapi.json status=000 curl_rc=23 status_line="HTTP/1.1 503 Service Unavailable"
-health_after status=200 curl_rc=0 status_line="HTTP/2 200 "
-result=FAIL
+path=/ method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+  body_prefix="{"detail":"Service unavailable"}"
+path=/card.svg method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+  body_prefix="{"detail":"Service unavailable"}"
+path=/history.svg method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+  body_prefix="{"detail":"Service unavailable"}"
+path=/export.csv method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+  body_prefix="{"detail":"Service unavailable"}"
+path=/expenses method=POST status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+  body_prefix="{"detail":"Service unavailable"}"
+path=/docs method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+  body_prefix="{"detail":"Service unavailable"}"
+path=/redoc method=GET status=503 curl_rc=0 hdr_bytes=2373 status_line="HTTP/2 503 " hdr_names="alt-svc,cache-control,cf-cache-status,cf-ray,content-type,date,pragma,rndr-id,server,vary,x-render-origin-server" cf_cache="DYNAMIC" server="cloudflare" cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0 origin_server="uvicorn"
+  body_prefix="{"detail":"Service unavailable"}"
