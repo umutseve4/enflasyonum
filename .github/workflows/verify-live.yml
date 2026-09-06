@@ -115,13 +115,15 @@ jobs:
             STATUS_LINE="$(head -n1 "$HDR_FILE" | tr -d '\r' | cut -c1-40)"
             HDR_NAMES="$(grep -oiE '^[A-Za-z0-9-]+:' "$HDR_FILE" | tr -d ':' \
                          | tr 'A-Z' 'a-z' | sort -u | paste -sd, -)"
+            CF_CACHE="$(grep -i '^cf-cache-status:' "$HDR_FILE" | head -n1 | cut -d' ' -f2- | tr -d '\r' | cut -c1-24)"
+            SRV="$(grep -i '^server:' "$HDR_FILE" | head -n1 | cut -d' ' -f2- | tr -d '\r' | cut -c1-24)"
             CC=0; PR=0; VA=0; WA=0
             grep -qi "^cache-control: *no-store" "$HDR_FILE" && CC=1
             grep -qi "^pragma: *no-cache" "$HDR_FILE" && PR=1
             grep -qi "^vary:.*authorization" "$HDR_FILE" && VA=1
             grep -qi "^www-authenticate: *Basic" "$HDR_FILE" && WA=1
             rm -f "$HDR_FILE"
-            echo "path=$PATHNAME method=$METHOD status=$CODE curl_rc=$RC hdr_bytes=$HDR_BYTES status_line=\"$STATUS_LINE\" hdr_names=\"$HDR_NAMES\" cache_no_store=$CC pragma_no_cache=$PR vary_auth=$VA www_auth_basic=$WA" >> "$OUT"
+            echo "path=$PATHNAME method=$METHOD status=$CODE curl_rc=$RC hdr_bytes=$HDR_BYTES status_line=\"$STATUS_LINE\" hdr_names=\"$HDR_NAMES\" cf_cache=\"$CF_CACHE\" server=\"$SRV\" cache_no_store=$CC pragma_no_cache=$PR vary_auth=$VA www_auth_basic=$WA" >> "$OUT"
 
             if [ "$CODE" = "000" ]; then
               # Ikinci sorgu: ayni istek, HTTP/1.1'e zorlanmis. Bu gecerse
@@ -185,7 +187,8 @@ jobs:
             elif [ "$METHOD" = "HEAD" ] && [ "$CODE" = "200" ]; then
               SAFE=1
             fi
-            echo "path=$PATHNAME method=$METHOD status=$CODE curl_rc=$RC public_contract_ok=$SAFE" >> "$OUT"
+            PCF="$(grep -i '^cf-cache-status:' /tmp/hdr | head -n1 | cut -d' ' -f2- | tr -d '\r' | cut -c1-24)"
+            echo "path=$PATHNAME method=$METHOD status=$CODE curl_rc=$RC cf_cache=\"$PCF\" public_contract_ok=$SAFE" >> "$OUT"
             if [ "$SAFE" != "1" ]; then
               if [ "$CODE" = "000" ]; then
                 echo "::error title=Acik yol yanitsiz::$METHOD $PATHNAME icin HTTP yaniti alinamadi (curl_rc=$RC)."
@@ -209,6 +212,26 @@ jobs:
           check_private GET /docs
           check_private GET /redoc
           check_private GET /openapi.json
+
+          # Sira testi. Onceki kosuda (38a1c24e) dort acik yol 200 dondu,
+          # hemen ardindan sekiz ozel yolun sekizi de Render'in 503 ara
+          # sayfasini aldi -- yedi saniye icinde. Iki okuma mumkun:
+          #   (a) uygulama ozel yollardan birinde olduve o andan sonra her
+          #       istek kenar sunucudan 503 aliyor;
+          #   (b) uygulama saglikli, kenar sunucu yalnizca o yollari 503
+          #       ile karsiliyor (yonlendirme/kural sorunu).
+          # Ayni /health'i ozel yol blogundan SONRA bir kez daha sormak bu
+          # ikisini ayirir. 503 gelirse (a), 200 gelirse (b).
+          HB="$(mktemp)"
+          probe GET /health "" "$HB"
+          H_AFTER_LINE="$(head -n1 "$HB" | tr -d '\r' | cut -c1-40)"
+          rm -f "$HB"
+          echo "health_after status=$PROBE_CODE curl_rc=$PROBE_RC status_line=\"$H_AFTER_LINE\"" >> "$OUT"
+          if [ "$PROBE_CODE" != "200" ]; then
+            echo "::error title=Uygulama blok icinde dustu::/health ozel yol blogundan ONCE 200 iken SONRA HTTP $PROBE_CODE (durum satiri: ${H_AFTER_LINE:-yok}). Kusur kenar sunucuda degil, uygulamanin kendisindedir: ozel yollardan biri sureci dusuruyor."
+          else
+            echo "::notice title=Uygulama ayakta kaldi::/health ozel yol blogundan sonra da 200 donuyor. Uygulama saglikli; 503 yanitlari kenar sunucudan geliyor."
+          fi
 
           if [ "$FAIL" = "0" ]; then
             echo "result=PASS" >> "$OUT"
