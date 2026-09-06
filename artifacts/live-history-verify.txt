@@ -1,14 +1,14 @@
-verify-live run: 2026-09-06T10:52:46Z
-path=/health method=GET status=200 public_contract_ok=1
-path=/health method=HEAD status=200 public_contract_ok=1
-path=/usage-progress method=GET status=200 public_contract_ok=1
-path=/usage-progress method=HEAD status=200 public_contract_ok=1
-path=/ method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/card.svg method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/history.svg method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/export.csv method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/expenses method=POST status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/docs method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/redoc method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
-path=/openapi.json method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+verify-live run: 2026-09-06T12:08:40Z
+path=/health method=GET status=200 curl_rc=0 public_contract_ok=1
+path=/health method=HEAD status=200 curl_rc=0 public_contract_ok=1
+path=/usage-progress method=GET status=200 curl_rc=0 public_contract_ok=1
+path=/usage-progress method=HEAD status=200 curl_rc=0 public_contract_ok=1
+path=/ method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/card.svg method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/history.svg method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/export.csv method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/expenses method=POST status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/docs method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/redoc method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/openapi.json method=GET status=000 curl_rc=23 hdr_bytes=339 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
 result=FAIL
