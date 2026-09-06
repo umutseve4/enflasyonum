@@ -79,32 +79,51 @@ jobs:
           FAIL=0
           echo "verify-live run: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
 
+          # status=000 yaninda ayristirilmis basliklarin gorunmesi imkansizdir:
+          # ya kod yakalama ya baslik yakalama yanlistir. Bu ikisini ayirt
+          # edebilmek icin curl'un cikis kodu ve baslik dosyasinin bayt sayisi
+          # da kayda gecer. Ayirt edemedigin seyi duzeltemezsin.
           check_private() {
             METHOD="$1"
             PATHNAME="$2"
             HDR_FILE="$(mktemp)"
             : > "$HDR_FILE"
-            CODE=$(curl -s -D "$HDR_FILE" -o /dev/null -w "%{http_code}" --max-time 180 \
-                   --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" || echo "000")
+            set +e
+            CODE=$(curl -s -S -D "$HDR_FILE" -o /dev/null -w "%{http_code}" --max-time 180 \
+                   --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" 2>/tmp/curl_err)
+            RC=$?
+            set -e
+            [ -n "$CODE" ] || CODE="000"
+            ERR="$(tr -d '\n' < /tmp/curl_err | cut -c1-160)"
+            HDR_BYTES=$(wc -c < "$HDR_FILE" | tr -d ' ')
             CC=0; PR=0; VA=0; WA=0
             grep -qi "^cache-control: *no-store" "$HDR_FILE" && CC=1
             grep -qi "^pragma: *no-cache" "$HDR_FILE" && PR=1
             grep -qi "^vary:.*authorization" "$HDR_FILE" && VA=1
             grep -qi "^www-authenticate: *Basic" "$HDR_FILE" && WA=1
             rm -f "$HDR_FILE"
-            echo "path=$PATHNAME method=$METHOD status=$CODE cache_no_store=$CC pragma_no_cache=$PR vary_auth=$VA www_auth_basic=$WA" >> "$OUT"
-            [ "$CODE" = "401" ] || FAIL=1
-            [ "$CC" = "1" ] || FAIL=1
-            [ "$PR" = "1" ] || FAIL=1
-            [ "$VA" = "1" ] || FAIL=1
-            [ "$WA" = "1" ] || FAIL=1
+            echo "path=$PATHNAME method=$METHOD status=$CODE curl_rc=$RC hdr_bytes=$HDR_BYTES cache_no_store=$CC pragma_no_cache=$PR vary_auth=$VA www_auth_basic=$WA" >> "$OUT"
+            if [ "$CODE" = "000" ]; then
+              echo "::error title=Ozel yol yanitsiz::$METHOD $PATHNAME icin HTTP yaniti alinamadi (curl_rc=$RC, baslik $HDR_BYTES bayt). Hata: ${ERR:-yok}. Bu erisilebilirlik sorunudur, kontrat ihlali degildir."
+              FAIL=1
+              return 0
+            fi
+            [ "$CODE" = "401" ] || { echo "::error title=Ozel yol 401 dondurmedi::$METHOD $PATHNAME -> HTTP $CODE (401 bekleniyordu). Yetkisiz erisim sizintisi olabilir."; FAIL=1; }
+            [ "$CC" = "1" ] || { echo "::error title=Baslik eksik::$METHOD $PATHNAME icin Cache-Control: no-store yok."; FAIL=1; }
+            [ "$PR" = "1" ] || { echo "::error title=Baslik eksik::$METHOD $PATHNAME icin Pragma: no-cache yok."; FAIL=1; }
+            [ "$VA" = "1" ] || { echo "::error title=Baslik eksik::$METHOD $PATHNAME icin Vary: Authorization yok."; FAIL=1; }
+            [ "$WA" = "1" ] || { echo "::error title=Baslik eksik::$METHOD $PATHNAME icin WWW-Authenticate: Basic yok."; FAIL=1; }
           }
 
           check_public() {
             PATHNAME="$1"
             METHOD="$2"
+            set +e
             CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" --max-time 180 \
-                   --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" || echo "000")
+                   --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" 2>/dev/null)
+            RC=$?
+            set -e
+            [ -n "$CODE" ] || CODE="000"
             SAFE=0
             if [ "$PATHNAME" = "/health" ] && [ "$METHOD" = "GET" ]; then
               if [ "$CODE" = "200" ] && python - <<'PY'
@@ -134,8 +153,15 @@ jobs:
             elif [ "$METHOD" = "HEAD" ] && [ "$CODE" = "200" ]; then
               SAFE=1
             fi
-            echo "path=$PATHNAME method=$METHOD status=$CODE public_contract_ok=$SAFE" >> "$OUT"
-            [ "$SAFE" = "1" ] || FAIL=1
+            echo "path=$PATHNAME method=$METHOD status=$CODE curl_rc=$RC public_contract_ok=$SAFE" >> "$OUT"
+            if [ "$SAFE" != "1" ]; then
+              if [ "$CODE" = "000" ]; then
+                echo "::error title=Acik yol yanitsiz::$METHOD $PATHNAME icin HTTP yaniti alinamadi (curl_rc=$RC)."
+              else
+                echo "::error title=Acik kontrat ihlali::$METHOD $PATHNAME -> HTTP $CODE, beklenen govde semasi dogrulanamadi."
+              fi
+              FAIL=1
+            fi
           }
 
           check_public /health GET
