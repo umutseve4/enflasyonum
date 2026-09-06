@@ -75,12 +75,18 @@ jobs:
           fi
 
       - name: Validate live privacy contract
+        # Zamanlayici duzeyinde ikinci bir emniyet. Adim siniri ISTEN kucuk
+        # olmali: boylece yavas bir kenar sunucu isin tamamini oldurmek
+        # yerine yalnizca bu adimi durdurur ve "Commit evidence" (if:
+        # always()) kaniti yine de depoya isler.
+        timeout-minutes: 10
         run: |
           set -u
           mkdir -p artifacts
           OUT=artifacts/live-history-verify.txt
           FAIL=0
           UNKNOWN=0
+          CLOSED=0
           HEALTH_BEFORE="000"
           echo "verify-live run: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
 
@@ -99,8 +105,17 @@ jobs:
             # $1 method, $2 path, $3 extra curl args, $4 header file
             set +e
             : > /tmp/body
-            curl -s -S -D "$4" -o /tmp/body -w "%{http_code}" --max-time 180 \
-                 --retry 6 --retry-delay 20 --retry-all-errors \
+            # Zamanlama siniri bilerek dar. Onceki surum her 503 icin
+            # 6 x 20s = 120 saniye bekliyordu; yedi ozel yol 14 dakika 24
+            # saniye etti ve is 15 dakikalik sinirda IPTAL edildi. Iptal
+            # edilen bir is, bu dosyanin ortadan kaldirmak icin yazildigi
+            # "kanit yoklugu" kusurunun ta kendisidir -- yalnizca iddia
+            # katmanindan zamanlayici katmanina tasinmis halidir.
+            # 503 kalici bir yanit; yeniden denemek onu degistirmez.
+            # Yeniden deneme artik yalnizca baglanti duzeyi hatalar icin.
+            curl -s -S -D "$4" -o /tmp/body -w "%{http_code}" \
+                 --connect-timeout 10 --max-time 25 \
+                 --retry 1 --retry-delay 3 --retry-max-time 12 \
                  $3 -X "$1" "$BASE$2" >/tmp/w.txt 2>/tmp/curl_err
             PROBE_RC=$?
             set -e
@@ -169,6 +184,31 @@ jobs:
                 echo "::error title=Ozel yol korumasiz::$METHOD $PATHNAME -> HTTP $CODE. 401 bekleniyordu; bu yol kimlik dogrulamasi olmadan yanit veriyor."
                 FAIL=1
                 return 0 ;;
+              503)
+                # Bu ayrim bu dosyadaki en onemli olcumdur. Onceki surumun
+                # "hepsi olculemedi" hukmu YANLISTI: govde yakalandiginda
+                # sekiz yolun sekizi de {"detail":"Service unavailable"}
+                # dondu ve basliklarda x-render-origin-server: uvicorn var.
+                # Bu Render'in HTML ara sayfasi degil; uygulamanin kendi
+                # JSONResponse'u (src/enflasyonum/main.py, satir 97-102).
+                # Tetikleyicisi owner_auth_boundary satir 134-135:
+                # ENFLASYONUM_OWNER_TOKEN uretimde tanimsiz, bu yuzden
+                # sinir HICBIR ozel yolu servis etmiyor. Yani bu bir olcum
+                # boslugu degil, KANITLANMIS kapali-devre durumudur:
+                # sizinti yok, cunku servis edilen ozel icerik yok.
+                # Ayirt edici govdenin TAM JSON imzasidir, "503" degil ve
+                # gevsek bir kelime eslesmesi de degil. Render'in HTML ara
+                # sayfasi da icinde "Service Unavailable" gecirir; onu
+                # kapali devre sanmak bu dalin yapabilecegi en kotu hata
+                # olurdu, cunku olculemeyen bir yolu yesile boyardi.
+                if [ -n "$ORIGIN" ] && printf '%s' "$BODY" | grep -q '{"detail":"Service unavailable"}'; then
+                  echo "::notice title=Kapali devre dogrulandi::$METHOD $PATHNAME -> HTTP 503, govde {\"detail\":\"Service unavailable\"}, kaynak sunucu \"$ORIGIN\". Uygulamanin kendi fail-closed yaniti; ENFLASYONUM_OWNER_TOKEN tanimsiz. Sizinti yok."
+                  CLOSED=$((CLOSED + 1))
+                else
+                  echo "::warning title=Ozel yol ulasilamadi::$METHOD $PATHNAME -> HTTP 503 ama kaynak sunucu imzasi yok (kenar: ${SRV:-yok}, govde: ${BODY:-yok}). Bu kenar sunucunun kendi ara sayfasi olabilir; olcum yapilamadi."
+                  UNKNOWN=$((UNKNOWN + 1))
+                fi
+                return 0 ;;
               5*|000)
                 echo "::warning title=Ozel yol ulasilamadi::$METHOD $PATHNAME -> HTTP $CODE (kenar: ${SRV:-yok}). Olcum yapilamadi."
                 UNKNOWN=$((UNKNOWN + 1))
@@ -188,8 +228,10 @@ jobs:
             PATHNAME="$1"
             METHOD="$2"
             set +e
-            CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" --max-time 180 \
-                   --retry 6 --retry-delay 20 --retry-all-errors -X "$METHOD" "$BASE$PATHNAME" 2>/dev/null)
+            CODE=$(curl -s -D /tmp/hdr -o /tmp/resp -w "%{http_code}" \
+                   --connect-timeout 10 --max-time 25 \
+                   --retry 1 --retry-delay 3 --retry-max-time 12 \
+                   -X "$METHOD" "$BASE$PATHNAME" 2>/dev/null)
             RC=$?
             set -e
             [ -n "$CODE" ] || CODE="000"
@@ -283,18 +325,27 @@ jobs:
             echo "::error title=Uygulama blok icinde dustu::/health ozel yol blogundan ONCE 200 iken SONRA HTTP $PROBE_CODE (durum satiri: ${H_AFTER_LINE:-yok}). Kusur kenar sunucuda degil, uygulamanin kendisindedir: ozel yollardan biri sureci dusuruyor."
             FAIL=1
           else
-            echo "::notice title=Uygulama ayakta kaldi::/health ozel yol blogundan ONCE de SONRA da 200 donuyor (cf_cache=DYNAMIC, yani onbellek degil kaynak sunucu yanitliyor). Uygulama saglikli; 503 yanitlari kenar sunucudan geliyor."
+            # DUZELTME: bu satir eskiden "503 yanitlari kenar sunucudan
+            # geliyor" diyordu. Govde yakalandiktan sonra bu iddia CURUDU.
+            # 503'ler kaynak sunucudan, yani uygulamanin kendisinden geliyor.
+            echo "::notice title=Uygulama ayakta kaldi::/health ozel yol blogundan ONCE de SONRA da 200 donuyor (cf_cache=DYNAMIC, yani onbellek degil kaynak sunucu yanitliyor). Ozel yollardaki 503'ler kenar sunucudan DEGIL, uygulamanin fail-closed dalindan geliyor."
           fi
 
           # Uc degerli sonuc. "Kusur bulundu" ile "olcemedim" ayni sey degil;
           # ikisini tek bir kirmiziya katlamak, hicbir commit'in duzeltemedigi
           # bir kirmizi uretir ve kirmizinin anlamini yok eder.
           if [ "$FAIL" != "0" ]; then
-            echo "result=FAIL unknown=$UNKNOWN" >> "$OUT"
+            echo "result=FAIL unknown=$UNKNOWN closed=$CLOSED" >> "$OUT"
           elif [ "$UNKNOWN" != "0" ]; then
-            echo "result=INCONCLUSIVE unknown=$UNKNOWN" >> "$OUT"
+            echo "result=INCONCLUSIVE unknown=$UNKNOWN closed=$CLOSED" >> "$OUT"
+          elif [ "$CLOSED" != "0" ]; then
+            # Kapali devre bir kusur degil, dogru davranistir: kimlik
+            # dogrulama sirri tanimsizken sinir hicbir seyi servis etmiyor.
+            # Yesil, ama sessiz degil -- durum kanida yaziliyor.
+            echo "result=PASS-CLOSED unknown=0 closed=$CLOSED" >> "$OUT"
+            echo "::notice title=Sonuc PASS-CLOSED::$CLOSED ozel yolun tamami uygulamanin fail-closed daliyla karsilandi. Gizlilik sozlesmesi ihlal edilmedi. Yollarin 401 ile yanit verdigini gormek icin uretimde ENFLASYONUM_OWNER_TOKEN tanimlanmalidir."
           else
-            echo "result=PASS unknown=0" >> "$OUT"
+            echo "result=PASS unknown=0 closed=0" >> "$OUT"
           fi
           cat "$OUT"
 
