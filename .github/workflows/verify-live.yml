@@ -1,5 +1,17 @@
 name: verify-live
 
+# Canli gizlilik kontratini dogrular.
+#
+# Render ucretsiz katmani bosta kalan servisi uykuya alir ve ilk istege
+# uygulamanin kendisi yerine bir "Service waking up" ara sayfasi dondurur.
+# Bu ara sayfa curl icin hata degildir; --retry-all-errors onu yeniden
+# denemez. Dolayisiyla uyuyan bir servise dogrudan kontrat sorulursa 12
+# kontrolun 12'si de saniyeler icinde duser ve uygulama saglikli oldugu
+# halde kirmizi alinir (bkz. kosu #10, 20 saniyede FAIL).
+#
+# Cozum: once uyandir, sonra sor. Uyandirma ayri bir adimdir; boylece
+# "uygulama hic uyanmadi" kirmizisi ile "uyandi ve kontrati bozdu"
+# kirmizisi birbirine karismaz.
 on:
   push:
     branches: [main]
@@ -13,15 +25,57 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE: "https://enflasyonum-7gcn.onrender.com"
     steps:
       - uses: actions/checkout@v7
+
+      - name: Warm up the Render instance (cold-start guard)
+        id: warmup
+        run: |
+          set -u
+          ATTEMPTS=12
+          DELAY=15
+          AWAKE=0
+          FIRST_CODE=""
+          for i in $(seq 1 "$ATTEMPTS"); do
+            CODE=$(curl -s -o /tmp/warm -w "%{http_code}" --max-time 90 "$BASE/health" || echo "000")
+            [ -n "$FIRST_CODE" ] || FIRST_CODE="$CODE"
+            if [ "$CODE" = "200" ] && python - <<'PY'
+          import json
+          from pathlib import Path
+
+          value = json.loads(Path("/tmp/warm").read_text())
+          assert value.get("status") == "ok"
+          PY
+            then
+              AWAKE=1
+              echo "warm-up attempt $i: HTTP $CODE, uygulama uyanik"
+              break
+            fi
+            echo "warm-up attempt $i: HTTP $CODE, govde henuz uygulama degil; $DELAY sn bekleniyor"
+            sleep "$DELAY"
+          done
+
+          {
+            echo "## Cold-start warm-up"
+            echo ""
+            echo "- ilk yanit kodu: \`$FIRST_CODE\`"
+            echo "- uygulama uyandi mi: **$([ "$AWAKE" = "1" ] && echo evet || echo hayir)**"
+            echo "- deneme butcesi: $ATTEMPTS x $DELAY sn"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$AWAKE" != "1" ]; then
+            echo "::error title=Uygulama uyanmadi::$((ATTEMPTS * DELAY)) sn icinde /health gercek JSON govdesi dondurmedi. Bu bir kontrat ihlali DEGIL, erisilebilirlik hatasidir."
+            exit 1
+          fi
 
       - name: Validate live privacy contract
         run: |
           set -u
           mkdir -p artifacts
           OUT=artifacts/live-history-verify.txt
-          BASE="https://enflasyonum-7gcn.onrender.com"
           FAIL=0
           echo "verify-live run: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
 
@@ -104,6 +158,18 @@ jobs:
             echo "result=FAIL" >> "$OUT"
           fi
           cat "$OUT"
+
+          # Kirmizi kosularda da kanit adim ozetine yazilir; asagidaki commit
+          # adimi yalnizca yesilde calistigi icin aksi halde kanit kaybolurdu.
+          {
+            echo ""
+            echo "## Live privacy contract"
+            echo ""
+            echo '```'
+            cat "$OUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
           exit "$FAIL"
 
       - name: Commit evidence
@@ -111,6 +177,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/live-history-verify.txt
-          git commit -m "chore: canlı gizlilik doğrulama kanıtı [skip ci]" || echo "no changes"
+          git commit -m "chore: canli gizlilik dogrulama kaniti [skip ci]" || echo "no changes"
           git pull --rebase origin main
           git push origin main
