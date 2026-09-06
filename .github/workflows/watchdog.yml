@@ -34,7 +34,7 @@ jobs:
           for i in $(seq 1 "$ATTEMPTS"); do
             CODE=$(curl -sS -o /tmp/health -w "%{http_code}" --max-time 90 \
               https://enflasyonum-7gcn.onrender.com/health || echo "000")
-            if [ "$CODE" = "200" ] && python - <<'PY'
+            if [ "$CODE" = "200" ] && python - 2>/dev/null <<'PY'
           import json
           from pathlib import Path
 
@@ -81,22 +81,32 @@ jobs:
           BODY_HEAD: ${{ steps.ping.outputs.body_head }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          set -u
+          # Govde bir dosyaya yazilir; cok satirli bir kabuk degiskeni
+          # kullanilsaydi devam satirlari YAML blok skalarini erken
+          # sonlandirirdi.
+          {
+            echo "Otomatik bekci: /health, uyandirma butcesi dolduktan sonra da kontrati saglamadi."
+            echo ""
+            echo "- son HTTP kodu: \`$CODE\`"
+            echo "- govdenin ilk 200 karakteri: \`$BODY_HEAD\`"
+            echo "- kosu: $RUN_URL"
+            echo ""
+            echo "Kod 200 ama govde JSON degilse bu Render'in uyandirma ara sayfasidir ve"
+            echo "servis uyanamiyordur. Kod 200 ve govde JSON ama alanlar farkliysa"
+            echo "dagitilan surum /health kontratini bozmustur. Render loglarini kontrol et."
+          } > /tmp/watchdog-body.md
+
           ISSUE_NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "$TITLE in:title" --json number,title \
             --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n 1)
-          BODY="Otomatik bekci: /health, uyandirma butcesi dolduktan sonra da kontrati saglamadi.
 
-- son HTTP kodu: \`$CODE\`
-- govdenin ilk 200 karakteri: \`$BODY_HEAD\`
-- kosu: $RUN_URL
-
-Kod 200 ama govde JSON degilse bu Render'in uyandirma ara sayfasidir ve servis
-uyanamiyordur. Kod 200 ve govde JSON ama alanlar farkliysa dagitilan surum
-/health kontratini bozmustur. Render loglarini kontrol et."
           if [ -n "$ISSUE_NUMBER" ]; then
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body-file /tmp/watchdog-body.md
           else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" \
+              --body-file /tmp/watchdog-body.md
           fi
 
       - name: Fail if unhealthy
