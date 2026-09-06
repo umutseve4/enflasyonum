@@ -135,8 +135,8 @@ async def owner_auth_boundary(request: Request, call_next):
         return _service_unavailable_response()
 
     owner_username = (
-    os.getenv("ENFLASYONUM_OWNER_USERNAME", "owner").strip() or "owner"
-)
+        os.getenv("ENFLASYONUM_OWNER_USERNAME", "owner").strip() or "owner"
+    )
     if not _is_owner_authenticated(request, owner_username, owner_token):
         return _unauthorized_response()
 
