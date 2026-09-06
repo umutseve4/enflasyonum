@@ -9,41 +9,106 @@ permissions:
   issues: write
   contents: read
 
+concurrency:
+  group: health-watchdog
+  cancel-in-progress: false
+
 jobs:
   health:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Ping /health
+      - name: Ping /health until the app answers
         id: ping
         run: |
-          code=$(curl -sS -o /dev/null -w "%{http_code}" \
-            --max-time 90 \
-            --retry 5 \
-            --retry-delay 20 \
-            --retry-all-errors \
-            https://enflasyonum-7gcn.onrender.com/health) || code="000"
+          set -u
+          # Render ucretsiz katmani bosta kalan servisi uykuya alir ve ilk
+          # istege HTTP 200 govdeli bir "Service waking up" ara sayfasi
+          # dondurur. Yalnizca durum koduna bakan bir bekci bu ara sayfayi
+          # "saglikli" sayar. Uyumak normaldir, alarm konusu degildir; bu
+          # yuzden once uyandiririz, sonra gercek govdeyi ariyoruz.
+          ATTEMPTS=10
+          DELAY=15
+          CONTRACT_OK=false
+          CODE="000"
+          for i in $(seq 1 "$ATTEMPTS"); do
+            CODE=$(curl -sS -o /tmp/health -w "%{http_code}" --max-time 90 \
+              https://enflasyonum-7gcn.onrender.com/health || echo "000")
+            if [ "$CODE" = "200" ] && python - 2>/dev/null <<'PY'
+          import json
+          from pathlib import Path
 
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "HTTP $code"
+          value = json.loads(Path("/tmp/health").read_text())
+          assert set(value) == {"status", "version"}
+          assert value["status"] == "ok"
+          assert isinstance(value["version"], str) and value["version"]
+          PY
+            then
+              CONTRACT_OK=true
+              echo "deneme $i: HTTP $CODE, /health kontrati saglandi"
+              break
+            fi
+            echo "deneme $i: HTTP $CODE, govde /health kontratini saglamiyor"
+            sleep "$DELAY"
+          done
+
+          BODY_HEAD="$(head -c 200 /tmp/health 2>/dev/null | tr -d '\r' | tr '\n' ' ')"
+
+          {
+            echo "code=$CODE"
+            echo "contract_ok=$CONTRACT_OK"
+            echo "body_head<<EOF_BODY"
+            echo "$BODY_HEAD"
+            echo "EOF_BODY"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Watchdog"
+            echo ""
+            echo "- son HTTP kodu: \`$CODE\`"
+            echo "- /health kontrati: **$CONTRACT_OK**"
+            echo "- butce: $ATTEMPTS x $DELAY sn"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "HTTP $CODE; contract_ok=$CONTRACT_OK"
 
       - name: Open or update issue on failure
-        if: steps.ping.outputs.code != '200'
+        if: steps.ping.outputs.contract_ok != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TITLE: "Watchdog FAIL: /health unhealthy"
           CODE: ${{ steps.ping.outputs.code }}
+          BODY_HEAD: ${{ steps.ping.outputs.body_head }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          set -u
+          # Govde bir dosyaya yazilir; cok satirli bir kabuk degiskeni
+          # kullanilsaydi devam satirlari YAML blok skalarini erken
+          # sonlandirirdi.
+          {
+            echo "Otomatik bekci: /health, uyandirma butcesi dolduktan sonra da kontrati saglamadi."
+            echo ""
+            echo "- son HTTP kodu: \`$CODE\`"
+            echo "- govdenin ilk 200 karakteri: \`$BODY_HEAD\`"
+            echo "- kosu: $RUN_URL"
+            echo ""
+            echo "Kod 200 ama govde JSON degilse bu Render'in uyandirma ara sayfasidir ve"
+            echo "servis uyanamiyordur. Kod 200 ve govde JSON ama alanlar farkliysa"
+            echo "dagitilan surum /health kontratini bozmustur. Render loglarini kontrol et."
+          } > /tmp/watchdog-body.md
+
           ISSUE_NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "$TITLE in:title" --json number,title \
             --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n 1)
-          BODY="Otomatik bekci: canli site saglikli yanit vermedi. HTTP $CODE. Render loglarini kontrol et. Run: $RUN_URL"
+
           if [ -n "$ISSUE_NUMBER" ]; then
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body-file /tmp/watchdog-body.md
           else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" \
+              --body-file /tmp/watchdog-body.md
           fi
 
       - name: Fail if unhealthy
-        if: steps.ping.outputs.code != '200'
+        if: steps.ping.outputs.contract_ok != 'true'
         run: exit 1
