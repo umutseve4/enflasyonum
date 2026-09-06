@@ -1,30 +1,14 @@
-verify-live koşusu: 2026-08-28T20:25:33Z
-
-== /health -> HTTP 200, 33 bytes ==
-Health kontratı (status=ok + version=0.7.1): PASS
-
-== /history.svg -> HTTP 200, 803 bytes ==
-SVG kök etiketi bulundu: PASS
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360" role="img" aria-label="Aylık harcama geçmişi grafiği">
-  <rect width="800" height="360" rx="24" fill="#101418"/>
-  <text x="40" y="56" fill="#8ab4f8" font-family="system-ui, sans-serif" font-size="24" font-weight="700">Harcama geçmişi</text>
-  <rect class="bar" x="184.0" y="96" width="432.0" height="200" rx="4" fill="#8ab4f8"/>
-  <text x="400.0" y="88" fill="#e8eaed" text-anchor="middle" font-family="sys
-
-== /card.svg -> HTTP 200, 1634 bytes ==
-SVG kök etiketi bulundu: PASS
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="418" viewBox="0 0 800 418" role="img" aria-label="Kişisel enflasyon özet kartı">
-  <rect width="800" height="418" rx="24" fill="#101418"/>
-  <text x="40" y="64" fill="#8ab4f8" font-family="system-ui, sans-serif" font-size="28" font-weight="700">Enflasyonumdan ne haber?</text>
-  <text x="40" y="130" fill="#9aa0a6" font-family="system-ui, sans-serif" font-size="20">Senin enflasyonun</text>
-  <text x="40" y="196" fill="#f28b82" font-fam
-
-== /export.csv -> HTTP 200, 322 bytes ==
-hexhead=efbbbf content_type_ok=1 header_ok=1
-CSV doğrulaması (BOM + tam başlık + content-type): PASS
-
-== /usage-progress -> HTTP 200, 72 bytes ==
-Usage progress kontratı (alanlar + türler + hedef + clamp): PASS
-
-===== OTOMATIK KONTROL =====
-SONUC: PASS
+verify-live run: 2026-09-06T10:52:46Z
+path=/health method=GET status=200 public_contract_ok=1
+path=/health method=HEAD status=200 public_contract_ok=1
+path=/usage-progress method=GET status=200 public_contract_ok=1
+path=/usage-progress method=HEAD status=200 public_contract_ok=1
+path=/ method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/card.svg method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/history.svg method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/export.csv method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/expenses method=POST status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/docs method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/redoc method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+path=/openapi.json method=GET status=000 cache_no_store=1 pragma_no_cache=1 vary_auth=1 www_auth_basic=0
+result=FAIL
