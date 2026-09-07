@@ -36,7 +36,9 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/enflasyonum_test
+      # Surucu oneki sart: proje psycopg3'e bagli, duz postgresql:// ise
+      # SQLAlchemy'de psycopg2 dialect'ine cozulur ve psycopg2 kurulu degil.
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/enflasyonum_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,6 +52,7 @@ jobs:
         # Bir workflow dosyasini bozmak, o dosya kosmadigi surece sessizce
         # gecer; bozuk workflow hic tetiklenmez ve yoklugu yesil gorunur.
         run: |
+          python -m pip install --quiet pyyaml
           python - <<'PY'
           import pathlib
           import sys
@@ -63,6 +66,8 @@ jobs:
                   detail = str(error).replace("%", "%25").replace("\n", "%0A")
                   print(f"::error title=Bozuk workflow YAML::{path}: {detail}")
                   failed = True
+              else:
+                  print(f"ok {path}")
           sys.exit(1 if failed else 0)
           PY
       - name: Lint
