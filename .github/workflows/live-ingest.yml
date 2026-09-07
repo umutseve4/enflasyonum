@@ -1,13 +1,14 @@
 name: live-ingest
 
 # M1.4 canlı doğrulama: EVDS'den gerçek TÜFE çekimi.
-# Bu dosyanın main'e push'u tetikler; sonuç artifacts/live-ingest.txt olarak commit'lenir.
-# Yeniden tetikleme #2: TP.TUKFIY2025.GENEL serisine geçiş sonrası (beklenti: 24 dönem).
+# Sonuç artifacts/live-ingest.txt olarak commit'lenir.
+# TP.TUKFIY2025.GENEL serisine geçiş sonrası beklenti: 24 dönem.
+#
+# Tetikleyici bilerek yalnızca workflow_dispatch. Daha önce bu dosyaya
+# yapılan push de tetikliyordu; bu, workflow dosyasının düzenlenmesini
+# canlı bir veri çekimine ve main'e commit atılmasına bağlıyordu.
+# Bir dosyayı düzenlemek bir üretim yazması başlatmamalı.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/live-ingest.yml"
   workflow_dispatch:
 
 permissions:
@@ -16,12 +17,13 @@ permissions:
 jobs:
   live:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       DATABASE_URL: "sqlite:///live.db"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
